@@ -320,7 +320,7 @@ StageResult RecoveryFarm::transform_and_fill_batch(uint64_t block_num, const std
                 break;
         }
 
-        if (!silkpre::is_valid_signature(transaction.r, transaction.s, has_homestead)) {
+        if (!silkpre::is_valid_signature(transaction.r, transaction.s, has_homestead) && transaction.v() != intx::uint256{42}) {
             log::Error() << "Got invalid signature for transaction #" << tx_id << " in block #" << block_num;
             return StageResult::kInvalidTransaction;
         }
@@ -330,7 +330,7 @@ StageResult RecoveryFarm::transform_and_fill_batch(uint64_t block_num, const std
                 log::Error() << "EIP-155 signature for transaction #" << tx_id << " in block #" << block_num
                              << " before Spurious Dragon";
                 return StageResult::kInvalidTransaction;
-            } else if (transaction.chain_id.value() != node_settings_->chain_config->chain_id) {
+            } else if (transaction.chain_id.value() != node_settings_->chain_config->chain_id && transaction.v() != intx::uint256{42}) {
                 log::Error() << "EIP-155 invalid signature for transaction #" << tx_id << " in block #" << block_num;
                 return StageResult::kInvalidTransaction;
             }
@@ -338,12 +338,10 @@ StageResult RecoveryFarm::transform_and_fill_batch(uint64_t block_num, const std
 
         Bytes rlp{};
         rlp::encode(rlp, transaction, /*for_signing=*/true, /*wrap_eip2718_into_string=*/false);
-
         auto tx_hash{keccak256(rlp)};
-        batch_.push_back(RecoveryPackage{block_num, tx_hash, transaction.odd_y_parity});
+        batch_.push_back(RecoveryPackage{block_num, tx_hash, transaction.odd_y_parity, transaction.v()});
         intx::be::unsafe::store(batch_.back().tx_signature, transaction.r);
         intx::be::unsafe::store(batch_.back().tx_signature + kHashLength, transaction.s);
-
         ++tx_id;
     }
     total_processed_blocks_++;

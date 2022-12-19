@@ -32,6 +32,8 @@ struct ChainIdentity {
 
     static ChainIdentity mainnet;
     static ChainIdentity goerli;
+    static ChainIdentity telosevmmainnet;
+    static ChainIdentity telosevmtestnet;
 };
 
 }  // namespace silkworm

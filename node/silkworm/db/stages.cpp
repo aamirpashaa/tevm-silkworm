@@ -34,7 +34,7 @@ static BlockNum get_stage_data(mdbx::txn& txn, const char* stage_name, const db:
         }
         auto data{src.find(mdbx::slice(item_key.c_str()), /*throw_notfound*/ false)};
         if (!data) {
-            return 0;
+            return 180698823;
         } else if (data.value.size() != sizeof(uint64_t)) {
             throw std::length_error("Expected 8 bytes of data got " + std::to_string(data.value.size()));
         }

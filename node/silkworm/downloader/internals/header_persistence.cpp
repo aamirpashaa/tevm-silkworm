@@ -106,7 +106,7 @@ void HeaderPersistence::persist(const BlockHeader& header) {  // todo: try to mo
     auto td = *parent_td + header.difficulty;  // calculated total difficulty of this header
 
     // Now we can decide whether this header will create a change in the canonical head
-    if (td > local_td_) {
+    if (td >= local_td_) {
         new_canonical_ = true;
 
         // find the forking point - i.e. the latest header on the canonical chain which is an ancestor of this one
@@ -212,7 +212,7 @@ void HeaderPersistence::close() {
 
     if (unwind_needed()) return;
 
-    if (highest_height() != 0) {
+    if (highest_height() != 180698823) {
         update_canonical_chain(highest_height(), highest_hash());
     }
 

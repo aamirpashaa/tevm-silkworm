@@ -200,6 +200,38 @@ inline constexpr ChainConfig kGoerliConfig{
         },
 };
 
+inline constexpr ChainConfig kTelosEVMMainnetConfig{
+    .chain_id = 40,
+    .evmc_fork_blocks =
+        {
+            180'698'823,          // Homestead
+            180'698'823,          // Tangerine Whistle
+            180'698'823,          // Spurious Dragon
+            180'698'823,          // Byzantium
+            180'698'823,          // Constantinople
+            180'698'823,          // Petersburg
+            180'698'823,          // Istanbul
+            180'698'823,          // Berlin
+            180'698'823,          // London
+        },
+};
+
+inline constexpr ChainConfig kTelosEVMTestnetConfig{
+    .chain_id = 41,
+    .evmc_fork_blocks =
+        {
+            136'393'756,          // Homestead
+            136'393'756,          // Tangerine Whistle
+            136'393'756,          // Spurious Dragon
+            136'393'756,          // Byzantium
+            136'393'756,          // Constantinople
+            136'393'756,          // Petersburg
+            136'393'756,          // Istanbul
+            136'393'756,          // Berlin
+            136'393'756,          // London
+        },
+};
+
 //! \brief Looksup a chain config provided its network id or its common name
 const ChainConfig* lookup_chain_config(std::variant<uint64_t, std::string> identifier) noexcept;
 

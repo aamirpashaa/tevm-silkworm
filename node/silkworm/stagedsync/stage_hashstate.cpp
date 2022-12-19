@@ -49,7 +49,7 @@ StageResult HashState::forward(db::RWTxn& txn) {
 
         reset_log_progress();
 
-        if (!previous_progress) {
+        if (previous_progress == 180698823) {
             success_or_throw(hash_from_plainstate(txn));
             collector_->clear();
             reset_log_progress();

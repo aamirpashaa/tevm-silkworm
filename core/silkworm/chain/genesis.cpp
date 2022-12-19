@@ -28,6 +28,12 @@ extern size_t sizeof_genesis_goerli_data();
 extern const char* genesis_rinkeby_data();
 extern size_t sizeof_genesis_rinkeby_data();
 
+extern const char* genesis_telosevmmainnet_data();
+extern size_t sizeof_genesis_telosevmmainnet_data();
+
+extern const char* genesis_telosevmtestnet_data();
+extern size_t sizeof_genesis_telosevmtestnet_data();
+
 namespace silkworm {
 
 std::string read_genesis_data(uint64_t chain_id) {
@@ -44,6 +50,14 @@ std::string read_genesis_data(uint64_t chain_id) {
         case 5:
             assert(sizeof_genesis_goerli_data() != 0);
             ret.assign(genesis_goerli_data(), sizeof_genesis_goerli_data());
+            break;
+        case 40:
+            assert(sizeof_genesis_telosevmmainnet_data() != 0);
+            ret.assign(genesis_telosevmmainnet_data(), sizeof_genesis_telosevmmainnet_data());
+            break;
+        case 41:
+            assert(sizeof_genesis_telosevmtestnet_data() != 0);
+            ret.assign(genesis_telosevmtestnet_data(), sizeof_genesis_telosevmtestnet_data());
             break;
         default:
             ret = "{";  // <- Won't be lately parsed as valid json value

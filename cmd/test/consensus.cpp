@@ -626,7 +626,6 @@ RunResults transaction_test(const nlohmann::json& j) {
                 continue;
             }
         }
-
         txn.recover_sender();
         if (should_be_valid && !txn.from.has_value()) {
             std::cout << "Failed to recover sender" << std::endl;

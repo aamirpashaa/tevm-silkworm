@@ -1036,7 +1036,7 @@ int main(int argc, char* argv[]) {
     auto cmd_initgenesis_json_opt =
         cmd_initgenesis->add_option("--json", "Full path to genesis json file")->check(CLI::ExistingFile);
 
-    std::map<std::string, uint32_t> genesis_map{{"mainnet", 1}, {"rinkeby", 4}, {"goerli", 5}};
+    std::map<std::string, uint32_t> genesis_map{{"mainnet", 1}, {"rinkeby", 4}, {"goerli", 5}, {"telosevmmainnet", 40}, {"telosevmtestnet", 41}};
     auto cmd_initgenesis_chain_opt = cmd_initgenesis->add_option("--chain", "Name of the chain to initialize")
                                          ->excludes(cmd_initgenesis_json_opt)
                                          ->transform(CLI::Transformer(genesis_map, CLI::ignore_case));

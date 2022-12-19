@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
         if (full) {
             auto txn{env.start_write()};
             txn.clear_map(db::open_map(txn, index_config));
-            db::stages::write_stage_progress(txn, stage_key, 0);
+            db::stages::write_stage_progress(txn, stage_key, 180698823);
             txn.commit();
         }
 

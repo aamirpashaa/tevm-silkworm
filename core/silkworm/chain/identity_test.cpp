@@ -35,6 +35,14 @@ TEST_CASE("distinct_fork_numbers") {
     };
 
     CHECK(ChainIdentity::goerli.distinct_fork_numbers() == expectedGoerliForkNumbers);
+
+    std::vector<BlockNum> expectedTelosEVMMainnetForkNumbers{};
+
+    CHECK(ChainIdentity::telosevmmainnet.distinct_fork_numbers() == expectedTelosEVMMainnetForkNumbers);
+
+    std::vector<BlockNum> expectedTelosEVMTestnetForkNumbers{};
+
+    CHECK(ChainIdentity::telosevmtestnet.distinct_fork_numbers() == expectedTelosEVMTestnetForkNumbers);
 }
 
 }  // namespace silkworm

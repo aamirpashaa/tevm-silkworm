@@ -128,7 +128,7 @@ StageResult SyncLoop::run_cycle(db::RWTxn& cycle_txn, Timer& log_timer) {
                 return stage_result;
             }
             auto [_, stage_duration] = stages_stop_watch.lap();
-            if (stage_duration > std::chrono::milliseconds(10)) {
+            if (stage_duration > std::chrono::milliseconds(0)) {
                 log::Info(get_log_prefix(), {"done", StopWatch::format(stage_duration)});
             }
         }

@@ -40,7 +40,7 @@ void EthashEngine::finalize(IntraBlockState& state, const Block& block, const ev
         miner_reward += block_reward / 32;
     }
 
-    state.add_to_balance(block.header.beneficiary, miner_reward);
+    // state.add_to_balance(block.header.beneficiary, miner_reward);
 }
 
 // Ethash ProofOfWork verification

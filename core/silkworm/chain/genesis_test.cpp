@@ -57,6 +57,24 @@ TEST_CASE("genesis config") {
     CHECK(config.has_value());
     CHECK(config.value() == kRinkebyConfig);
 
+    genesis_data = read_genesis_data(static_cast<uint32_t>(kTelosEVMMainnetConfig.chain_id));
+    genesis_json = nlohmann::json::parse(genesis_data, nullptr, /* allow_exceptions = */ false);
+    CHECK_FALSE(genesis_json.is_discarded());
+
+    CHECK((genesis_json.contains("config") && genesis_json["config"].is_object()));
+    config = ChainConfig::from_json(genesis_json["config"]);
+    CHECK(config.has_value());
+    CHECK(config.value() == kTelosEVMMainnetConfig);
+
+    genesis_data = read_genesis_data(static_cast<uint32_t>(kTelosEVMTestnetConfig.chain_id));
+    genesis_json = nlohmann::json::parse(genesis_data, nullptr, /* allow_exceptions = */ false);
+    CHECK_FALSE(genesis_json.is_discarded());
+
+    CHECK((genesis_json.contains("config") && genesis_json["config"].is_object()));
+    config = ChainConfig::from_json(genesis_json["config"]);
+    CHECK(config.has_value());
+    CHECK(config.value() == kTelosEVMTestnetConfig);
+
     genesis_data = read_genesis_data(1'000u);
     genesis_json = nlohmann::json::parse(genesis_data, nullptr, /* allow_exceptions = */ false);
     CHECK(genesis_json.is_discarded());

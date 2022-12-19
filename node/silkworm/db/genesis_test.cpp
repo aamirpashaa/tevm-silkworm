@@ -54,6 +54,19 @@ namespace db {
             // We don't have json data (yet)
             REQUIRE(db::initialize_genesis(txn, genesis_json, /*allow_exceptions=*/false) == false);
         }
+        SECTION("Initialize with TelosEVMMainnet") {
+            auto source_data{silkworm::read_genesis_data(silkworm::kTelosEVMMainnetConfig.chain_id)};
+            auto genesis_json = nlohmann::json::parse(source_data, nullptr, /*allow_exceptions=*/false);
+            // We don't have json data (yet)
+            REQUIRE(db::initialize_genesis(txn, genesis_json, /*allow_exceptions=*/false) == false);
+        }
+
+        SECTION("Initialize with TelosEVMTestnet") {
+            auto source_data{silkworm::read_genesis_data(silkworm::kTelosEVMTestnetConfig.chain_id)};
+            auto genesis_json = nlohmann::json::parse(source_data, nullptr, /*allow_exceptions=*/false);
+            // We don't have json data (yet)
+            REQUIRE(db::initialize_genesis(txn, genesis_json, /*allow_exceptions=*/false) == false);
+        }
 
         SECTION("Initialize with invalid Json") {
             std::string source_data{"{chainId="};

@@ -67,7 +67,29 @@ static ChainIdentity goerli_identity() {
     return id;
 }
 
+static ChainIdentity telosevmmainnet_identity() {
+    ChainIdentity id;
+
+    id.name = "telosevmmainnet";
+    id.chain = kTelosEVMMainnetConfig;
+    id.genesis_hash = 0x9bd7e881e0903ea4fa161c7f00096c11346f122bff30a3a5122ef5c1f9c9f80c_bytes32;
+
+    return id;
+}
+
+static ChainIdentity telosevmtestnet_identity() {
+    ChainIdentity id;
+
+    id.name = "telosevmtestnet";
+    id.chain = kTelosEVMTestnetConfig;
+    id.genesis_hash = 0x3ba6f4ac4f5b74e8e62622b9d8c75d1e4ad10abb3b7e4770cbab7338a861a4f9_bytes32;
+
+    return id;
+}
+
 ChainIdentity ChainIdentity::mainnet = mainnet_identity();
 ChainIdentity ChainIdentity::goerli = goerli_identity();
+ChainIdentity ChainIdentity::telosevmmainnet = telosevmmainnet_identity();
+ChainIdentity ChainIdentity::telosevmtestnet = telosevmtestnet_identity();
 
 }  // namespace silkworm

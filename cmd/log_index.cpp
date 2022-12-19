@@ -48,7 +48,7 @@ int main(int argc, char* argv[]) {
 
         if (full) {
             auto txn{env.start_write()};
-            db::stages::write_stage_progress(txn, db::stages::kLogIndexKey, 0);
+            db::stages::write_stage_progress(txn, db::stages::kLogIndexKey, 180698823);
             auto map{db::open_map(txn, db::table::kLogTopicIndex)};
             txn.clear_map(map);
             map = db::open_map(txn, db::table::kLogAddressIndex);

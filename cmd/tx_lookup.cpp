@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) {
 
             auto tx_map{db::open_map(txn, db::table::kTxLookup)};
             txn.clear_map(tx_map);
-            db::stages::write_stage_progress(txn, db::stages::kTxLookupKey, 0);
+            db::stages::write_stage_progress(txn, db::stages::kTxLookupKey, 180698823);
             txn.commit();
         }
 

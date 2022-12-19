@@ -28,11 +28,15 @@ TEST_CASE("Config lookup") {
     CHECK(lookup_chain_config(3u) == &kRopstenConfig);
     CHECK(lookup_chain_config(4u) == &kRinkebyConfig);
     CHECK(lookup_chain_config(5u) == &kGoerliConfig);
+    CHECK(lookup_chain_config(40u) == &kTelosEVMMainnetConfig);
+    CHECK(lookup_chain_config(41u) == &kTelosEVMTestnetConfig);
     CHECK(lookup_chain_config(12345u) == nullptr);
     CHECK(lookup_chain_config("mainnet") == &kMainnetConfig);
     CHECK(lookup_chain_config("ropsten") == &kRopstenConfig);
     CHECK(lookup_chain_config("Rinkeby") == &kRinkebyConfig);
     CHECK(lookup_chain_config("goErli") == &kGoerliConfig);
+    CHECK(lookup_chain_config("telosevmmainnet") == &kTelosEVMMainnetConfig);
+    CHECK(lookup_chain_config("telosevmtestnet") == &kTelosEVMTestnetConfig);
     CHECK(lookup_chain_config("xxxx") == nullptr);
 
     auto chains_map{get_known_chains_map()};

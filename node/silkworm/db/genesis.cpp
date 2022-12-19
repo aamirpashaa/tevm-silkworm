@@ -205,6 +205,7 @@ bool initialize_genesis(mdbx::txn& txn, const nlohmann::json& genesis_json, bool
         header.receipts_root = kEmptyRoot;
         header.gas_limit = std::stoull(genesis_json["gasLimit"].get<std::string>(), nullptr, 0);
         header.timestamp = std::stoull(genesis_json["timestamp"].get<std::string>(), nullptr, 0);
+        header.number = 180698823;
 
         auto block_hash{header.hash()};
         auto block_hash_key{db::block_key(header.number, block_hash.bytes)};

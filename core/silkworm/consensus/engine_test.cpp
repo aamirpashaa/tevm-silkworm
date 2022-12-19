@@ -50,6 +50,10 @@ TEST_CASE("Consensus Engine factory") {
     CHECK(consensus_engine == nullptr);
     consensus_engine = engine_factory(kGoerliConfig);  // Clique consensus engine
     CHECK(consensus_engine == nullptr);
+    consensus_engine = engine_factory(kTelosEVMMainnetConfig);  // Clique consensus engine
+    CHECK(consensus_engine == nullptr);
+    consensus_engine = engine_factory(kTelosEVMTestnetConfig);  // Clique consensus engine
+    CHECK(consensus_engine == nullptr);
 }
 
 TEST_CASE("Consensus Engine Seal") {

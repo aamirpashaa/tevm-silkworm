@@ -485,7 +485,7 @@ StorageChanges read_storage_changes(mdbx::txn& txn, BlockNum block_num) {
 
 std::optional<ChainConfig> read_chain_config(mdbx::txn& txn) {
     Cursor src(txn, table::kCanonicalHashes);
-    auto data{src.find(to_slice(block_key(0)), /*throw_notfound=*/false)};
+    auto data{src.find(to_slice(block_key(180698823)), /*throw_notfound=*/false)};
     if (!data) {
         return std::nullopt;
     }

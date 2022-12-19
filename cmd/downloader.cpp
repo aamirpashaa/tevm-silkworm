@@ -133,6 +133,10 @@ int main(int argc, char* argv[]) {
         ChainIdentity chain_identity;
         if (node_settings.chain_config->chain_id == ChainIdentity::mainnet.chain.chain_id)
             chain_identity = ChainIdentity::mainnet;
+        else if (node_settings.chain_config->chain_id == ChainIdentity::telosevmmainnet.chain.chain_id)
+            chain_identity = ChainIdentity::telosevmmainnet;
+        else if (node_settings.chain_config->chain_id == ChainIdentity::telosevmtestnet.chain.chain_id)
+            chain_identity = ChainIdentity::telosevmtestnet;
         else // for Rinkey & Goerli we have not implemented the consensus engine yet; for Ropsten we lack genesis json file
             throw std::logic_error("Chain id=" + std::to_string(node_settings.chain_config->chain_id) + " not supported");
 

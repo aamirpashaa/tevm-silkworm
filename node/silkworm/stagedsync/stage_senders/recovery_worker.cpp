@@ -61,10 +61,13 @@ void RecoveryWorker::work() {
             if (block_num != package.block_num && is_stopping()) {
                 throw std::runtime_error("Operation cancelled");
             }
-
-            if (!silkpre_recover_address(package.tx_from.bytes, package.tx_hash.bytes, package.tx_signature,
-                                         package.odd_y_parity, context_)) {
-                throw std::runtime_error("Unable to recover from address in block " + std::to_string(block_num));
+            if (package.v != intx::uint256{42}) {
+                if (!silkpre_recover_address(package.tx_from.bytes, package.tx_hash.bytes, package.tx_signature,
+                                            package.odd_y_parity, context_)) {
+                    throw std::runtime_error("Unable to recover from address in block " + std::to_string(block_num));
+                }
+            } else {
+                memcpy(package.tx_from.bytes, &package.tx_signature[32], 20);
             }
             ++processed;
         }

@@ -100,7 +100,7 @@ evmc::result EVM::create(const evmc_message& message) noexcept {
     evmc::result res{EVMC_SUCCESS, message.gas, nullptr, 0};
 
     auto value{intx::be::load<intx::uint256>(message.value)};
-    if (state_.get_balance(message.sender) < value) {
+    if (state_.get_balance(message.sender) < value && message.sender != 0x0000000000000000000000000000000000000000_address) {
         res.status_code = EVMC_INSUFFICIENT_BALANCE;
         return res;
     }
@@ -112,7 +112,9 @@ evmc::result EVM::create(const evmc_message& message) noexcept {
         res.status_code = EVMC_ARGUMENT_OUT_OF_RANGE;
         return res;
     }
-    state_.set_nonce(message.sender, nonce + 1);
+    if (message.sender != 0x0000000000000000000000000000000000000000_address) {
+        state_.set_nonce(message.sender, nonce + 1);
+    }
 
     evmc::address contract_addr{};
     if (message.kind == EVMC_CREATE) {
@@ -139,9 +141,12 @@ evmc::result EVM::create(const evmc_message& message) noexcept {
     if (rev >= EVMC_SPURIOUS_DRAGON) {
         state_.set_nonce(contract_addr, 1);
     }
-
-    state_.subtract_from_balance(message.sender, value);
-    state_.add_to_balance(contract_addr, value);
+    if (message.sender != 0x0000000000000000000000000000000000000000_address) {
+        state_.subtract_from_balance(message.sender, value);
+    }
+    if (contract_addr != 0x0000000000000000000000000000000000000000_address) {
+        state_.add_to_balance(contract_addr, value);
+    }
 
     const evmc_message deploy_message{
         EVMC_CALL,       // kind
@@ -192,7 +197,7 @@ evmc::result EVM::call(const evmc_message& message) noexcept {
     evmc_result res{evmc_make_result(EVMC_SUCCESS, message.gas, nullptr, 0)};
 
     const auto value{intx::be::load<intx::uint256>(message.value)};
-    if (message.kind != EVMC_DELEGATECALL && state_.get_balance(message.sender) < value) {
+    if (message.kind != EVMC_DELEGATECALL && state_.get_balance(message.sender) < value && message.sender != 0x0000000000000000000000000000000000000000_address) {
         res.status_code = EVMC_INSUFFICIENT_BALANCE;
         return evmc::result{res};
     }
@@ -205,8 +210,12 @@ evmc::result EVM::call(const evmc_message& message) noexcept {
             // https://github.com/ethereum/go-ethereum/blob/v1.9.25/core/vm/evm.go#L391
             state_.touch(message.recipient);
         } else {
-            state_.subtract_from_balance(message.sender, value);
-            state_.add_to_balance(message.recipient, value);
+            if (message.sender != 0x0000000000000000000000000000000000000000_address) {
+                state_.subtract_from_balance(message.sender, value);
+            }
+            if (message.recipient != 0x0000000000000000000000000000000000000000_address) {
+                state_.add_to_balance(message.recipient, value);
+            }
         }
     }
 

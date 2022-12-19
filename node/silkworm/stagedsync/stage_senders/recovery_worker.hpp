@@ -37,6 +37,7 @@ struct RecoveryPackage {
     BlockNum block_num;        // Block number this package refers to
     ethash::hash256 tx_hash;   // Keccak hash of transaction's rlp representation
     bool odd_y_parity;         // Whether y parity is odd (https://eips.ethereum.org/EIPS/eip-155)
+    intx::uint256 v;
     uint8_t tx_signature[64];  // Signature of transaction
     evmc::address tx_from;     // Recovered address
 };

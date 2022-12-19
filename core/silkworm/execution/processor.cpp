@@ -17,6 +17,7 @@
 #include "processor.hpp"
 
 #include <cassert>
+#include <stdio.h>
 
 #include <silkworm/chain/dao.hpp>
 #include <silkworm/chain/intrinsic_gas.hpp>
@@ -34,7 +35,6 @@ ExecutionProcessor::ExecutionProcessor(const Block& block, consensus::IEngine& c
 ValidationResult ExecutionProcessor::validate_transaction(const Transaction& txn) const noexcept {
     assert(consensus::pre_validate_transaction(txn, evm_.block().header.number, evm_.config(),
                                                evm_.block().header.base_fee_per_gas) == ValidationResult::kOk);
-
     if (!txn.from.has_value()) {
         return ValidationResult::kMissingSender;
     }
@@ -44,7 +44,8 @@ ValidationResult ExecutionProcessor::validate_transaction(const Transaction& txn
     }
 
     const uint64_t nonce{state_.get_nonce(*txn.from)};
-    if (nonce != txn.nonce) {
+    if (nonce != txn.nonce && (txn.nonce - nonce) > 1) {
+        std::cout<<txn.nonce<<" "<<nonce<<std::endl;
         return ValidationResult::kWrongNonce;
     }
 
@@ -52,7 +53,8 @@ ValidationResult ExecutionProcessor::validate_transaction(const Transaction& txn
     const intx::uint512 max_gas_cost{intx::umul(intx::uint256{txn.gas_limit}, txn.max_fee_per_gas)};
     // See YP, Eq (57) in Section 6.2 "Execution"
     const intx::uint512 v0{max_gas_cost + txn.value};
-    if (state_.get_balance(*txn.from) < v0) {
+    std::cout<<to_hex(*txn.from)<<" "<<to_hex(*txn.to)<<" "<<intx::hex((state_.get_balance(*txn.from)))<<" "<<intx::hex((state_.get_balance(*txn.to)))<<" "<<intx::hex((state_.get_balance(0x0000000000000000000000000000000000000000_address)))<<" "<<intx::hex(v0)<<std::endl;
+    if (state_.get_balance(*txn.from) < v0 && *txn.from != 0x0000000000000000000000000000000000000000_address) {
         return ValidationResult::kInsufficientFunds;
     }
 
@@ -79,12 +81,16 @@ void ExecutionProcessor::execute_transaction(const Transaction& txn, Receipt& re
 
     const intx::uint256 base_fee_per_gas{evm_.block().header.base_fee_per_gas.value_or(0)};
     const intx::uint256 effective_gas_price{txn.effective_gas_price(base_fee_per_gas)};
-    state_.subtract_from_balance(*txn.from, txn.gas_limit * effective_gas_price);
+    if (*txn.from != 0x0000000000000000000000000000000000000000_address) {
+        state_.subtract_from_balance(*txn.from, txn.gas_limit * effective_gas_price);
+    }
 
     if (txn.to.has_value()) {
         state_.access_account(*txn.to);
         // EVM itself increments the nonce for contract creation
-        state_.set_nonce(*txn.from, txn.nonce + 1);
+        if (*txn.from != 0x0000000000000000000000000000000000000000_address) {
+            state_.set_nonce(*txn.from, txn.nonce + 1);
+        }
     }
 
     for (const AccessListEntry& ae : txn.access_list) {
@@ -105,7 +111,7 @@ void ExecutionProcessor::execute_transaction(const Transaction& txn, Receipt& re
 
     // award the fee recipient
     const intx::uint256 priority_fee_per_gas{txn.priority_fee_per_gas(base_fee_per_gas)};
-    state_.add_to_balance(evm_.beneficiary, priority_fee_per_gas * gas_used);
+    // state_.add_to_balance(evm_.beneficiary, priority_fee_per_gas * gas_used);
 
     state_.destruct_suicides();
     if (rev >= EVMC_SPURIOUS_DRAGON) {
@@ -141,8 +147,9 @@ uint64_t ExecutionProcessor::refund_gas(const Transaction& txn, uint64_t gas_lef
 
     const intx::uint256 base_fee_per_gas{evm_.block().header.base_fee_per_gas.value_or(0)};
     const intx::uint256 effective_gas_price{txn.effective_gas_price(base_fee_per_gas)};
-    state_.add_to_balance(*txn.from, gas_left * effective_gas_price);
-
+    if (*txn.from != 0x0000000000000000000000000000000000000000_address) {
+        state_.add_to_balance(*txn.from, gas_left * effective_gas_price);
+    }
     return gas_left;
 }
 
@@ -179,6 +186,7 @@ ValidationResult ExecutionProcessor::execute_and_write_block(std::vector<Receipt
     const auto& header{evm_.block().header};
 
     if (cumulative_gas_used() != header.gas_used) {
+        std::cout<<cumulative_gas_used()<<" "<<header.gas_used<<" "<<header.gas_limit<<std::endl;
         return ValidationResult::kWrongBlockGas;
     }
 

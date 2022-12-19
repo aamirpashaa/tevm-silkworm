@@ -3,6 +3,7 @@ xcode
 *.code-workspace
 .idea
 .vscode
+.vscode-upload.json
 .vs
 CMakeFiles
 Makefile
