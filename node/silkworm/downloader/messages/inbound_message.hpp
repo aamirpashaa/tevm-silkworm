@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_INBOUND_MESSAGE_HPP
-#define SILKWORM_INBOUND_MESSAGE_HPP
+#pragma once
 
 #include <memory>
 
@@ -30,7 +29,7 @@ class InboundMessage : public Message {
   public:
     static std::shared_ptr<InboundMessage> make(const sentry::InboundMessage& msg);
 
-    void execute(Db::ReadOnlyAccess, HeaderChain&, BodySequence&, SentryClient&) override = 0;
+    void execute(db::ROAccess, HeaderChain&, BodySequence&, SentryClient&) override = 0;
 
     virtual uint64_t reqId() const = 0;
     virtual std::string content() const = 0;
@@ -40,5 +39,3 @@ std::ostream& operator<<(std::ostream&, const silkworm::InboundMessage&);
 std::string identify(const silkworm::InboundMessage& message);
 
 }  // namespace silkworm
-
-#endif  // SILKWORM_INBOUND_MESSAGE_HPP

@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_BACKEND_STATE_CHANGE_COLLECTION_HPP_
-#define SILKWORM_BACKEND_STATE_CHANGE_COLLECTION_HPP_
+#pragma once
 
 #include <functional>
 #include <map>
@@ -25,8 +24,8 @@
 
 #include <evmc/evmc.hpp>
 #include <gsl/pointers>
-
 #include <remote/kv.pb.h>
+
 #include <silkworm/common/util.hpp>
 
 namespace silkworm {
@@ -106,6 +105,4 @@ class StateChangeCollection : public StateChangeSource {
     std::mutex consumers_mutex_;
 };
 
-} // namespace silkworm
-
-#endif // SILKWORM_BACKEND_STATE_CHANGE_COLLECTION_HPP_
+}  // namespace silkworm

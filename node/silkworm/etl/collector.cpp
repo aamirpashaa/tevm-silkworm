@@ -1,17 +1,17 @@
 /*
-    Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+       http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
 */
 
 #include "collector.hpp"
@@ -22,6 +22,7 @@
 
 #include <silkworm/common/directories.hpp>
 #include <silkworm/common/log.hpp>
+#include <silkworm/common/stopwatch.hpp>
 #include <silkworm/concurrency/signal_handler.hpp>
 
 namespace silkworm::etl {
@@ -37,6 +38,7 @@ Collector::~Collector() {
 
 void Collector::flush_buffer() {
     if (buffer_.size()) {
+        StopWatch sw(/*auto_start=*/true);
         buffer_.sort();
 
         /* Build a unique file name to pass FileProvider */
@@ -46,29 +48,36 @@ void Collector::flush_buffer() {
         file_providers_.emplace_back(new FileProvider(new_file_path.string(), file_providers_.size()));
         file_providers_.back()->flush(buffer_);
         buffer_.clear();
-        log::Info("Collector flushed file", {"path", std::string(file_providers_.back()->get_file_name()), "size",
-                                             human_size(file_providers_.back()->get_file_size())});
+        const auto [_, duration]{sw.stop()};
+        log::Info("Collector flushed file", {"path", std::string(file_providers_.back()->get_file_name()),
+                                             "size", human_size(file_providers_.back()->get_file_size()),
+                                             "in", StopWatch::format(duration)});
     }
 }
 
 void Collector::collect(const Entry& entry) {
-    buffer_.put(entry);
     ++size_;
+    bytes_size_ += entry.size();
+    buffer_.put(entry);
     if (buffer_.overflows()) {
         flush_buffer();
     }
 }
 
 void Collector::collect(Entry&& entry) {
-    buffer_.put(std::move(entry));
     ++size_;
+    bytes_size_ += entry.size();
+    buffer_.put(std::move(entry));
     if (buffer_.overflows()) {
         flush_buffer();
     }
 }
 
 void Collector::load(mdbx::cursor& target, const LoadFunc& load_func, MDBX_put_flags_t flags) {
-    size_t counter{32};  // Every 32 entry we track the key being loaded
+    using namespace std::chrono_literals;
+    static const auto kLogInterval{5s};               // Updates processing key (for log purposes) every this time
+    auto log_time{std::chrono::steady_clock::now()};  // To check if an update of key is needed
+
     set_loading_key({});
 
     if (empty()) {
@@ -79,18 +88,17 @@ void Collector::load(mdbx::cursor& target, const LoadFunc& load_func, MDBX_put_f
         buffer_.sort();
 
         for (const auto& etl_entry : buffer_.entries()) {
-            if (!--counter) {
+            if (const auto now{std::chrono::steady_clock::now()}; log_time <= now) {
                 if (SignalHandler::signalled()) {
                     throw std::runtime_error("Operation cancelled");
                 }
-                counter = 32;
                 set_loading_key(etl_entry.key);
+                log_time = now + kLogInterval;
             }
             if (load_func) {
                 load_func(etl_entry, target, flags);
             } else {
                 mdbx::slice k{db::to_slice(etl_entry.key)};
-
                 if (etl_entry.value.empty()) {
                     target.erase(k);
                 } else {
@@ -100,8 +108,7 @@ void Collector::load(mdbx::cursor& target, const LoadFunc& load_func, MDBX_put_f
             }
         }
 
-        size_ = 0;
-        buffer_.clear();
+        clear();
         return;
     }
 
@@ -129,11 +136,11 @@ void Collector::load(mdbx::cursor& target, const LoadFunc& load_func, MDBX_put_f
         auto& [etl_entry, provider_index]{queue.top()};           // Pick the smallest key by reference
         auto& file_provider{file_providers_.at(provider_index)};  // and set current file provider
 
-        if (!--counter) {
+        if (const auto now{std::chrono::steady_clock::now()}; log_time <= now) {
             if (SignalHandler::signalled()) {
                 throw std::runtime_error("Operation cancelled");
             }
-            counter = 32;
+            log_time = now + kLogInterval;
             set_loading_key(etl_entry.key);
         }
 
@@ -142,8 +149,12 @@ void Collector::load(mdbx::cursor& target, const LoadFunc& load_func, MDBX_put_f
             load_func(etl_entry, target, flags);
         } else {
             mdbx::slice k{db::to_slice(etl_entry.key)};
-            mdbx::slice v{db::to_slice(etl_entry.value)};
-            mdbx::error::success_or_throw(target.put(k, &v, flags));
+            if (etl_entry.value.empty()) {
+                target.erase(k);
+            } else {
+                mdbx::slice v{db::to_slice(etl_entry.value)};
+                mdbx::error::success_or_throw(target.put(k, &v, flags));
+            }
         }
 
         // From the provider which has served the current key
@@ -162,7 +173,7 @@ void Collector::load(mdbx::cursor& target, const LoadFunc& load_func, MDBX_put_f
             file_provider.reset();
         }
     }
-    size_ = 0;  // We have consumed all items
+    clear();
 }
 
 std::filesystem::path Collector::set_work_path(const std::optional<std::filesystem::path>& provided_work_path) {

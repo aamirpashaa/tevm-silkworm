@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -17,23 +17,25 @@
 #include "config.hpp"
 
 #include <functional>
+#include <set>
 
 #include <silkworm/common/as_range.hpp>
 
 namespace silkworm {
 
 static const std::vector<std::pair<std::string, const ChainConfig*>> kKnownChainConfigs{
-    {"mainnet", &kMainnetConfig},  //
-    {"ropsten", &kRopstenConfig},  //
-    {"rinkeby", &kRinkebyConfig},  //
-    {"goerli", &kGoerliConfig},    //
-    {"telosevmmainnet", &kTelosEVMMainnetConfig}, //
-    {"telosevmtestnet", &kTelosEVMTestnetConfig} //
+    {"mainnet", &kMainnetConfig},
+    {"rinkeby", &kRinkebyConfig},
+    {"goerli", &kGoerliConfig},
+    {"sepolia", &kSepoliaConfig},
+    {"telosevmmainnet", &kTelosEVMMainnetConfig},
+    {"telosevmtestnet", &kTelosEVMTestnetConfig}
 };
 
 constexpr const char* kTerminalTotalDifficulty{"terminalTotalDifficulty"};
 constexpr const char* kTerminalBlockNumber{"terminalBlockNumber"};
 constexpr const char* kTerminalBlockHash{"terminalBlockHash"};
+constexpr const char* kGenesisHash{"genesisBlockHash"};
 
 static inline void member_to_json(nlohmann::json& json, const std::string& key, const std::optional<uint64_t>& source) {
     if (source.has_value()) {
@@ -84,8 +86,13 @@ nlohmann::json ChainConfig::to_json() const noexcept {
     }
 
     if (terminal_block_hash.has_value()) {
-        ret[kTerminalBlockHash] = "0x" + to_hex(*terminal_block_hash);
+        ret[kTerminalBlockHash] = to_hex(*terminal_block_hash, /*with_prefix=*/true);
     }
+
+    if (genesis_hash.has_value()) {
+        ret[kGenesisHash] = to_hex(*genesis_hash, /*with_prefix=*/true);
+    }
+
     return ret;
 }
 
@@ -118,8 +125,18 @@ std::optional<ChainConfig> ChainConfig::from_json(const nlohmann::json& json) no
     read_json_config_member(json, kTerminalBlockNumber, config.terminal_block_number);
 
     if (json.contains(kTerminalTotalDifficulty)) {
-        config.terminal_total_difficulty =
-            intx::from_string<intx::uint256>(json[kTerminalTotalDifficulty].get<std::string>());
+        // We handle terminalTotalDifficulty serialized both as JSON string *and* as JSON number
+        if (json[kTerminalTotalDifficulty].is_string()) {
+            /* This is still present to maintain compatibility with previous Silkworm format */
+            config.terminal_total_difficulty =
+                intx::from_string<intx::uint256>(json[kTerminalTotalDifficulty].get<std::string>());
+        } else if (json[kTerminalTotalDifficulty].is_number()) {
+            /* This is for compatibility with Erigon that uses a JSON number */
+            // nlohmann::json treats JSON numbers that overflow 64-bit unsigned integer as floating-point numbers and
+            // intx::uint256 cannot currently be constructed from a floating-point number or string in scientific notation
+            config.terminal_total_difficulty =
+                from_string_sci<intx::uint256>(json[kTerminalTotalDifficulty].dump().c_str());
+        }
     }
 
     if (json.contains(kTerminalBlockHash)) {
@@ -128,6 +145,10 @@ std::optional<ChainConfig> ChainConfig::from_json(const nlohmann::json& json) no
             config.terminal_block_hash = to_bytes32(*terminal_block_hash_bytes);
         }
     }
+
+    /* Note ! genesis_hash is purposely omitted. It must be loaded from db after the
+     * effective genesis block has been persisted */
+
     return config;
 }
 
@@ -144,21 +165,46 @@ void ChainConfig::set_revision_block(evmc_revision rev, std::optional<uint64_t> 
         evmc_fork_blocks[static_cast<size_t>(rev) - 1] = block;
     }
 }
+std::vector<BlockNum> ChainConfig::distinct_fork_numbers() const {
+    std::set<BlockNum> ret;
+
+    for (const auto& block_number : evmc_fork_blocks) {
+        (void)ret.insert(block_number.value_or(0));
+    }
+
+    (void)ret.insert(dao_block.value_or(0));
+    (void)ret.insert(muir_glacier_block.value_or(0));
+    (void)ret.insert(arrow_glacier_block.value_or(0));
+    (void)ret.insert(gray_glacier_block.value_or(0));
+
+    ret.erase(0);  // Block 0 is not a fork number
+    return {ret.cbegin(), ret.cend()};
+}
 
 std::ostream& operator<<(std::ostream& out, const ChainConfig& obj) { return out << obj.to_json(); }
 
-const ChainConfig* lookup_chain_config(std::variant<uint64_t, std::string> identifier) noexcept {
-    auto it{as_range::find_if(kKnownChainConfigs,
-                              [&identifier](const std::pair<std::string, const ChainConfig*>& x) -> bool {
-                                  if (std::holds_alternative<std::string>(identifier)) {
-                                      return iequals(x.first, std::get<std::string>(identifier));
-                                  }
-                                  return x.second->chain_id == std::get<uint64_t>(identifier);
-                              })};
+std::optional<std::pair<const std::string, const ChainConfig*>> lookup_known_chain(const uint64_t chain_id) noexcept {
+    auto it{
+        as_range::find_if(kKnownChainConfigs, [&chain_id](const std::pair<std::string, const ChainConfig*>& x) -> bool {
+            return x.second->chain_id == chain_id;
+        })};
+
     if (it == kKnownChainConfigs.end()) {
-        return nullptr;
+        return std::nullopt;
     }
-    return it->second;
+    return std::make_pair(it->first, it->second);
+}
+
+std::optional<std::pair<const std::string, const ChainConfig*>> lookup_known_chain(const std::string_view identifier) noexcept {
+    auto it{
+        as_range::find_if(kKnownChainConfigs, [&identifier](const std::pair<std::string, const ChainConfig*>& x) -> bool {
+            return iequals(x.first, identifier);
+        })};
+
+    if (it == kKnownChainConfigs.end()) {
+        return std::nullopt;
+    }
+    return std::make_pair(it->first, it->second);
 }
 
 std::map<std::string, uint64_t> get_known_chains_map() noexcept {

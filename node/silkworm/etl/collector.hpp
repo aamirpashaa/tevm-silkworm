@@ -1,9 +1,12 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
+
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
+
        http://www.apache.org/licenses/LICENSE-2.0
+
    Unless required by applicable law or agreed to in writing, software
    distributed under the License is distributed on an "AS IS" BASIS,
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -11,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_ETL_COLLECTOR_HPP_
-#define SILKWORM_ETL_COLLECTOR_HPP_
+#pragma once
 
 #include <mutex>
 
@@ -64,6 +66,9 @@ class Collector {
     //! \brief Returns the number of actually collected items
     [[nodiscard]] size_t size() const { return size_; }
 
+    //! \brief Returns the number of actually collected bytes
+    [[nodiscard]] size_t bytes_size() const { return bytes_size_; }
+
     //! \brief Returns whether this instance is empty (i.e. no items)
     [[nodiscard]] bool empty() const { return size_ == 0; }
 
@@ -72,6 +77,7 @@ class Collector {
         file_providers_.clear();
         buffer_.clear();
         size_ = 0;
+        bytes_size_ = 0;
     }
 
     //! \brief Returns the hex representation of current load key (for progress tracking)
@@ -108,11 +114,10 @@ class Collector {
     uintptr_t unique_id_{reinterpret_cast<uintptr_t>(this)};
 
     std::vector<std::unique_ptr<FileProvider>> file_providers_;  // Collection of file providers
-    size_t size_{0};                                             // Total collected size
+    size_t size_{0};                                             // Count of total collected items
+    size_t bytes_size_{0};                                       // Count of total collected bytes
     mutable std::mutex mutex_{};                                 // To sync loading_key_
     std::string loading_key_{};                                  // Actual load key (for log purposes)
 };
 
 }  // namespace silkworm::etl
-
-#endif  // SILKWORM_ETL_COLLECTOR_HPP_

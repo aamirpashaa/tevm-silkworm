@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_BACKEND_ETHEREUM_BACKEND_HPP_
-#define SILKWORM_BACKEND_ETHEREUM_BACKEND_HPP_
+#pragma once
 
 #include <memory>
 #include <optional>
@@ -23,9 +22,9 @@
 #include <vector>
 
 #include <silkworm/backend/state_change_collection.hpp>
+#include <silkworm/chain/config.hpp>
 #include <silkworm/common/base.hpp>
 #include <silkworm/common/settings.hpp>
-#include <silkworm/chain/config.hpp>
 
 namespace silkworm {
 
@@ -66,6 +65,4 @@ class EthereumBackEnd {
     std::unique_ptr<StateChangeCollection> state_change_collection_;
 };
 
-} // namespace silkworm
-
-#endif // SILKWORM_BACKEND_ETHEREUM_BACKEND_HPP_
+}  // namespace silkworm

@@ -1,5 +1,5 @@
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,18 +14,17 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_RECEIVE_PEER_STATS_HPP
-#define SILKWORM_RECEIVE_PEER_STATS_HPP
+#pragma once
 
-#include <silkworm/downloader/sentry_client.hpp>
+#include <p2psentry/sentry.grpc.pb.h>
+
+#include <silkworm/downloader/internals/grpc_sync_client.hpp>
 
 namespace silkworm::rpc {
 
-class ReceivePeerStats : public rpc::OutStreamingCall<sentry::Sentry, sentry::PeersRequest, sentry::PeersReply> {
+class ReceivePeerStats : public rpc::OutStreamingCall<sentry::Sentry, sentry::PeerEventsRequest, sentry::PeerEvent> {
   public:
     ReceivePeerStats();
 };
 
 }  // namespace silkworm::rpc
-
-#endif //SILKWORM_RECEIVE_PEER_STATS_HPP

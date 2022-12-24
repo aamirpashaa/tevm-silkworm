@@ -1,23 +1,25 @@
 /*
-    Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+       http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
 */
 
 #include "genesis.hpp"
 
+#include <silkworm/chain/genesis.hpp>
 #include <silkworm/state/in_memory_state.hpp>
 #include <silkworm/trie/hash_builder.hpp>
+#include <silkworm/trie/nibbles.hpp>
 
 #include "tables.hpp"
 
@@ -51,13 +53,13 @@ std::pair<bool, std::vector<std::string>> validate_genesis_json(const nlohmann::
                     ret.second.emplace_back("Incomplete / Wrong genesis config member");
                 } else {
                     if (chain_config->seal_engine == SealEngineType::kEthash) {
-                        if (!genesis_json.contains("mixhash") || !genesis_json["mixhash"].is_string() ||
+                        if (!genesis_json.contains("mixHash") || !genesis_json["mixHash"].is_string() ||
                             !genesis_json.contains("nonce") || !genesis_json["nonce"].is_string()) {
-                            ret.second.emplace_back("Missing mixhash and or nonce member for ethash PoW chain");
+                            ret.second.emplace_back("Missing mixHash and or nonce member for ethash PoW chain");
                         } else {
-                            auto mixhash = from_hex(genesis_json["mixhash"].get<std::string>());
+                            auto mixhash = from_hex(genesis_json["mixHash"].get<std::string>());
                             if (!mixhash.has_value() || mixhash->length() != kHashLength) {
-                                ret.second.emplace_back("mixhash member is not a valid hash hex string");
+                                ret.second.emplace_back("mixHash member is not a valid hash hex string");
                             }
                             auto nonce = from_hex(genesis_json["nonce"].get<std::string>());
                             if (!nonce.has_value()) {
@@ -134,7 +136,6 @@ bool initialize_genesis(mdbx::txn& txn, const nlohmann::json& genesis_json, bool
     try {
         InMemoryState state_buffer{};
         evmc::bytes32 state_root_hash{kEmptyRoot};
-        const auto chain_config = ChainConfig::from_json(genesis_json["config"]);
 
         // Allocate accounts
         if (genesis_json.contains("alloc")) {
@@ -175,41 +176,11 @@ bool initialize_genesis(mdbx::txn& txn, const nlohmann::json& genesis_json, bool
             state_root_hash = hb.root_hash();
         }
 
-        // Fill Header and Body
-        BlockHeader header;
-        BlockBody body{};
-
-        auto extra_data = from_hex(genesis_json["extraData"].get<std::string>());
-        if (extra_data.has_value()) {
-            header.extra_data = extra_data.value();
-        }
-
-        if (chain_config->seal_engine == SealEngineType::kEthash && genesis_json.contains("mixhash")) {
-            auto mixhash = from_hex(genesis_json["mixhash"].get<std::string>());
-            std::memcpy(header.mix_hash.bytes, mixhash->data(), mixhash->size());
-        }
-        if (genesis_json.contains("nonce")) {
-            auto nonce = from_hex(genesis_json["nonce"].get<std::string>());
-            if (nonce.has_value() && nonce->length() == sizeof(uint64_t)) {  // 0x0 is not passing right now
-                std::memcpy(header.nonce.data(), nonce->data(), nonce->size());
-            }
-        }
-        if (genesis_json.contains("difficulty")) {
-            auto difficulty_str{genesis_json["difficulty"].get<std::string>()};
-            header.difficulty = intx::from_string<intx::uint256>(difficulty_str);
-        }
-
-        header.ommers_hash = kEmptyListHash;
-        header.state_root = state_root_hash;
-        header.transactions_root = kEmptyRoot;
-        header.receipts_root = kEmptyRoot;
-        header.gas_limit = std::stoull(genesis_json["gasLimit"].get<std::string>(), nullptr, 0);
-        header.timestamp = std::stoull(genesis_json["timestamp"].get<std::string>(), nullptr, 0);
-        header.number = 180698823;
+        const BlockHeader header{read_genesis_header(genesis_json, state_root_hash)};
 
         auto block_hash{header.hash()};
         auto block_hash_key{db::block_key(header.number, block_hash.bytes)};
-        db::write_header(txn, header, /*with_header_numbers=*/true);  // Write table::kHeaders and table::kHeaderNumbers
+        db::write_header(txn, header, /*with_header_numbers=*/true);            // Write table::kHeaders and table::kHeaderNumbers
         db::write_canonical_header_hash(txn, block_hash.bytes, header.number);  // Insert header hash as canonical
         db::write_total_difficulty(txn, block_hash_key, header.difficulty);     // Write initial difficulty
 
@@ -224,7 +195,7 @@ bool initialize_genesis(mdbx::txn& txn, const nlohmann::json& genesis_json, bool
         // Write Chain Settings
         auto config_data{genesis_json["config"].dump()};
         db::open_cursor(txn, db::table::kConfig)
-            .upsert(db::to_slice(block_hash.bytes), mdbx::slice{config_data.c_str()});
+            .upsert(db::to_slice(block_hash.bytes), mdbx::slice{config_data.data()});
 
         return true;
 

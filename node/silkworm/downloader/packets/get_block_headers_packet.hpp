@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_GET_BLOCK_HEADERS_PACKET_HPP
-#define SILKWORM_GET_BLOCK_HEADERS_PACKET_HPP
+#pragma once
 
 #include "hash_or_number.hpp"
 
@@ -58,5 +57,3 @@ inline std::ostream& operator<<(std::ostream& os, const GetBlockHeadersPacket66&
 }
 
 }  // namespace silkworm
-
-#endif  // SILKWORM_GET_BLOCK_HEADERS_PACKET_HPP

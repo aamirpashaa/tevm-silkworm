@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -49,7 +49,13 @@ intx::uint256* new_uint256_le(uint64_t a, uint64_t b, uint64_t c, uint64_t d) { 
 
 void delete_uint256(intx::uint256* x) { delete x; }
 
-const ChainConfig* lookup_config(uint64_t chain_id) { return lookup_chain_config(chain_id); }
+const ChainConfig* lookup_config(uint64_t chain_id) {
+    const auto chain{lookup_known_chain(chain_id)};
+    if (!chain.has_value()) {
+        return nullptr;
+    }
+    return chain->second;
+}
 
 ChainConfig* new_config(uint64_t chain_id) {
     auto out{new ChainConfig};
@@ -86,8 +92,8 @@ Transaction* new_transaction(const Bytes* rlp) {
 
 void delete_transaction(Transaction* x) { delete x; }
 
-bool check_intrinsic_gas(const Transaction* txn, bool homestead, bool istanbul) {
-    intx::uint128 g0{intrinsic_gas(*txn, homestead, istanbul)};
+bool check_intrinsic_gas(const Transaction* txn, evmc_revision rev) {
+    intx::uint128 g0{intrinsic_gas(*txn, rev)};
     return txn->gas_limit >= g0;
 }
 

@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 #include "util.hpp"
 
-#include <cassert>
+#include <cstdio>
 #include <regex>
 
 #include <silkworm/common/as_range.hpp>
@@ -114,7 +114,7 @@ std::optional<unsigned> decode_hex_digit(char ch) noexcept {
 }
 
 std::optional<Bytes> from_hex(std::string_view hex) noexcept {
-    if (hex.length() >= 2 && hex[0] == '0' && (hex[1] == 'x' || hex[1] == 'X')) {
+    if (has_hex_prefix(hex)) {
         hex.remove_prefix(2);
     }
     if (hex.empty()) {
@@ -168,7 +168,7 @@ std::optional<Bytes> from_hex(std::string_view hex) noexcept {
 
 inline bool case_insensitive_char_comparer(char a, char b) { return (tolower(a) == tolower(b)); }
 
-bool iequals(const std::string& a, const std::string& b) {
+bool iequals(const std::string_view a, const std::string_view b) {
     return (a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(), case_insensitive_char_comparer));
 }
 
@@ -227,8 +227,9 @@ std::string human_size(uint64_t bytes) {
             break;
         }
     }
-    static char output[64];
-    sprintf(output, "%.02lf %s", value, suffix[index]);
+    static constexpr size_t kBufferSize{64};
+    SILKWORM_THREAD_LOCAL char output[kBufferSize];
+    std::snprintf(output, kBufferSize, "%.02lf %s", value, suffix[index]);
     return output;
 }
 
@@ -240,24 +241,6 @@ size_t prefix_length(ByteView a, ByteView b) {
         }
     }
     return len;
-}
-
-std::vector<std::string> split(std::string_view source, std::string_view delimiter) {
-    std::vector<std::string> res{};
-    if (delimiter.length() >= source.length() || !delimiter.length()) {
-        res.emplace_back(source);
-        return res;
-    }
-    size_t pos{0};
-    while ((pos = source.find(delimiter)) != std::string::npos) {
-        res.emplace_back(source.substr(0, pos));
-        source.remove_prefix(pos + delimiter.length());
-    }
-    // Any residual part of input where delimiter is not found
-    if (source.length()) {
-        res.emplace_back(source);
-    }
-    return res;
 }
 
 }  // namespace silkworm

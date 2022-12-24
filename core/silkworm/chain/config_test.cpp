@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -23,29 +23,25 @@ using namespace evmc::literals;
 namespace silkworm {
 
 TEST_CASE("Config lookup") {
-    CHECK(lookup_chain_config(0u) == nullptr);
-    CHECK(lookup_chain_config(1u) == &kMainnetConfig);
-    CHECK(lookup_chain_config(3u) == &kRopstenConfig);
-    CHECK(lookup_chain_config(4u) == &kRinkebyConfig);
-    CHECK(lookup_chain_config(5u) == &kGoerliConfig);
-    CHECK(lookup_chain_config(40u) == &kTelosEVMMainnetConfig);
-    CHECK(lookup_chain_config(41u) == &kTelosEVMTestnetConfig);
-    CHECK(lookup_chain_config(12345u) == nullptr);
-    CHECK(lookup_chain_config("mainnet") == &kMainnetConfig);
-    CHECK(lookup_chain_config("ropsten") == &kRopstenConfig);
-    CHECK(lookup_chain_config("Rinkeby") == &kRinkebyConfig);
-    CHECK(lookup_chain_config("goErli") == &kGoerliConfig);
-    CHECK(lookup_chain_config("telosevmmainnet") == &kTelosEVMMainnetConfig);
-    CHECK(lookup_chain_config("telosevmtestnet") == &kTelosEVMTestnetConfig);
-    CHECK(lookup_chain_config("xxxx") == nullptr);
+    CHECK(lookup_known_chain(0u).has_value() == false);
+    CHECK(lookup_known_chain(1u)->second == &kMainnetConfig);
+    CHECK(lookup_known_chain(4u)->second == &kRinkebyConfig);
+    CHECK(lookup_known_chain(5u)->second == &kGoerliConfig);
+    CHECK(lookup_known_chain(12345u).has_value() == false);
+    CHECK(lookup_known_chain("mainnet")->second == &kMainnetConfig);
+    CHECK(lookup_known_chain("Rinkeby")->second == &kRinkebyConfig);
+    CHECK(lookup_known_chain("goErli")->second == &kGoerliConfig);
+    CHECK(lookup_known_chain("telosevmmainnet")->second == &kTelosEVMMainnetConfig);
+    CHECK(lookup_known_chain("telosevmtestnet")->second == &kTelosEVMTestnetConfig);
+    CHECK(lookup_known_chain("xxxx").has_value() == false);
 
     auto chains_map{get_known_chains_map()};
     CHECK(chains_map.empty() == false);
     for (auto& [name, id] : chains_map) {
-        REQUIRE(lookup_chain_config(name) != nullptr);
-        REQUIRE(lookup_chain_config(id) != nullptr);
-        REQUIRE(lookup_chain_config(name) == lookup_chain_config(id));
-        REQUIRE(lookup_chain_config(name)->chain_id == id);
+        REQUIRE(lookup_known_chain(name).has_value());
+        REQUIRE(lookup_known_chain(id).has_value());
+        REQUIRE(lookup_known_chain(name) == lookup_known_chain(id));
+        REQUIRE(lookup_known_chain(name)->second->chain_id == id);
     }
 }
 
@@ -107,6 +103,33 @@ TEST_CASE("Config revision") {
     CHECK(kMainnetConfig.revision(14'000'000) == EVMC_LONDON);
 }
 
+TEST_CASE("distinct_fork_numbers") {
+    std::vector<BlockNum> expectedMainnetForkNumbers{
+        1'150'000,
+        1'920'000,
+        2'463'000,
+        2'675'000,
+        4'370'000,
+        7'280'000,
+        9'069'000,
+        9'200'000,
+        12'244'000,
+        12'965'000,
+        13'773'000,
+        15'050'000,
+    };
+
+    CHECK(kMainnetConfig.distinct_fork_numbers() == expectedMainnetForkNumbers);
+
+    std::vector<BlockNum> expectedGoerliForkNumbers{
+        1'561'651,
+        4'460'644,
+        5'062'605,
+    };
+
+    CHECK(kGoerliConfig.distinct_fork_numbers() == expectedGoerliForkNumbers);
+}
+
 TEST_CASE("JSON serialization") {
     const auto unrelated_json = nlohmann::json::parse(R"({
             "firstName": "John",
@@ -132,6 +155,7 @@ TEST_CASE("JSON serialization") {
             "londonBlock":12965000,
             "arrowGlacierBlock":13773000,
             "grayGlacierBlock":15050000,
+            "terminalTotalDifficulty":"58750000000000000000000",
             "ethash":{}
         })");
 
@@ -155,7 +179,7 @@ TEST_CASE("JSON serialization") {
             "terminalTotalDifficulty":"39387012740608862000000",
             "terminalBlockNumber":10000,
             "terminalBlockHash":"0x6dc57fd586f41ee340124c3a005642af7731a9ca7a7b70d989a7e2833e4ab740",
-            "mergeForkBlock":10000
+            "mergeNetsplitBlock":10000
         })");
 
     const std::optional<ChainConfig> config2{ChainConfig::from_json(merge_test_json)};
@@ -167,6 +191,80 @@ TEST_CASE("JSON serialization") {
     CHECK(config2->revision_block(EVMC_PARIS) == 10000);
 
     CHECK(config2->to_json() == merge_test_json);
+}
+
+TEST_CASE("terminalTotalDifficulty as JSON number (Erigon compatibility)") {
+    const auto mainnet_json_ttd_number = nlohmann::json::parse(R"({
+            "chainId":1,
+            "homesteadBlock":1150000,
+            "daoForkBlock":1920000,
+            "eip150Block":2463000,
+            "eip155Block":2675000,
+            "byzantiumBlock":4370000,
+            "constantinopleBlock":7280000,
+            "petersburgBlock":7280000,
+            "istanbulBlock":9069000,
+            "muirGlacierBlock":9200000,
+            "berlinBlock":12244000,
+            "londonBlock":12965000,
+            "arrowGlacierBlock":13773000,
+            "grayGlacierBlock":15050000,
+            "terminalTotalDifficulty":58750000000000000000000,
+            "ethash":{}
+        })");
+
+    const std::optional<ChainConfig> config1{ChainConfig::from_json(mainnet_json_ttd_number)};
+
+    REQUIRE(config1);
+    CHECK(config1 == kMainnetConfig);
+    CHECK(config1->to_json() != mainnet_json_ttd_number);  // "58750000000000000000000" vs 5.875e+22
+    CHECK(config1->terminal_total_difficulty == intx::from_string<intx::uint256>("58750000000000000000000"));
+
+    const auto goerli_json_ttd_number = nlohmann::json::parse(R"({
+            "chainId":5,
+            "homesteadBlock":0,
+            "eip150Block":0,
+            "eip155Block":0,
+            "byzantiumBlock":0,
+            "constantinopleBlock":0,
+            "petersburgBlock":0,
+            "istanbulBlock":1561651,
+            "berlinBlock":4460644,
+            "londonBlock":5062605,
+            "terminalTotalDifficulty":10790000,
+            "clique":{}
+        })");
+
+    const std::optional<ChainConfig> config2{ChainConfig::from_json(goerli_json_ttd_number)};
+
+    REQUIRE(config2);
+    CHECK(config2 == kGoerliConfig);
+    CHECK(config2->to_json() != goerli_json_ttd_number);  // "10790000" vs 10790000
+    CHECK(config2->terminal_total_difficulty == intx::from_string<intx::uint256>("10790000"));
+
+    const auto sepolia_json_ttd_number = nlohmann::json::parse(R"({
+            "chainId":11155111,
+            "homesteadBlock":0,
+            "eip150Block":0,
+            "eip155Block":0,
+            "byzantiumBlock":0,
+            "constantinopleBlock":0,
+            "petersburgBlock":0,
+            "istanbulBlock":0,
+            "muirGlacierBlock":0,
+            "berlinBlock":0,
+            "londonBlock":0,
+            "terminalTotalDifficulty":17000000000000000,
+            "mergeNetsplitBlock":1735371,
+            "ethash":{}
+        })");
+
+    const std::optional<ChainConfig> config3{ChainConfig::from_json(sepolia_json_ttd_number)};
+
+    REQUIRE(config3);
+    CHECK(config3 == kSepoliaConfig);
+    CHECK(config3->to_json() != sepolia_json_ttd_number);  // "17000000000000000" vs 17000000000000000
+    CHECK(config3->terminal_total_difficulty == intx::from_string<intx::uint256>("17000000000000000"));
 }
 
 }  // namespace silkworm

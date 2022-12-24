@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_EXECUTION_EXECUTION_HPP_
-#define SILKWORM_EXECUTION_EXECUTION_HPP_
+#pragma once
 
 #include <vector>
 
@@ -31,7 +30,7 @@ namespace silkworm {
 /** @brief Executes a given block and writes resulting changes into the state.
  *
  * Preconditions:
- *  pre_validate_block(block) must return kOk;
+ *  validate_block_header & pre_validate_block_body must return kOk;
  *  transaction senders must be already populated.
  *
  * Warning: This method does not verify state root;
@@ -53,5 +52,3 @@ namespace silkworm {
 }
 
 }  // namespace silkworm
-
-#endif  // SILKWORM_EXECUTION_EXECUTION_HPP_

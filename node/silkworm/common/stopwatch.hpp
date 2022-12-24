@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
 */
 
 #pragma once
-#ifndef SILKWORM_COMMON_STOPWATCH_HPP_
-#define SILKWORM_COMMON_STOPWATCH_HPP_
 
 #include <chrono>
 #include <iomanip>
@@ -80,5 +78,3 @@ class StopWatch {
 };
 
 }  // namespace silkworm
-
-#endif  // !SILKWORM_COMMON_STOPWATCH_HPP_

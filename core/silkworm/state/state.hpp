@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_STATE_STATE_HPP_
-#define SILKWORM_STATE_STATE_HPP_
+#pragma once
 
 #include <silkworm/state/block_state.hpp>
 #include <silkworm/types/account.hpp>
@@ -86,5 +85,3 @@ class State : public BlockState {
 };
 
 }  // namespace silkworm
-
-#endif  // SILKWORM_STATE_STATE_HPP_

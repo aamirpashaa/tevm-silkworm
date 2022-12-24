@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -20,14 +20,15 @@
 
 #include <silkworm/chain/genesis.hpp>
 #include <silkworm/chain/protocol_param.hpp>
+#include <silkworm/common/cast.hpp>
 #include <silkworm/common/test_context.hpp>
+#include <silkworm/common/test_util.hpp>
 #include <silkworm/db/buffer.hpp>
 #include <silkworm/db/prune_mode.hpp>
 #include <silkworm/db/tables.hpp>
 #include <silkworm/execution/execution.hpp>
-#include <silkworm/stagedsync/stagedsync.hpp>
-
-#include "stages.hpp"
+#include <silkworm/stagedsync/stage.hpp>
+#include <silkworm/stagedsync/stage_history_index.hpp>
 
 namespace silkworm {
 
@@ -135,9 +136,8 @@ namespace db {
         auto main_crs{txn.open_cursor(main_map)};
         std::vector<std::string> table_names{};
 
-        const db::WalkFunc walk_func{[&table_names](::mdbx::cursor&, ::mdbx::cursor::move_result& data) -> bool {
-            table_names.push_back(data.key.as_string());
-            return true;
+        const auto walk_func{[&table_names](ByteView key, ByteView) {
+            table_names.push_back(byte_ptr_cast(key.data()));
         }};
 
         main_crs.to_first();
@@ -437,6 +437,15 @@ namespace db {
         CHECK_NOTHROW(write_canonical_header(txn, header));
         CHECK_NOTHROW(write_header(txn, header, /*with_header_numbers=*/true));
 
+        // Read back canonical header hash
+        auto db_hash{read_canonical_header_hash(txn, block_num)};
+        REQUIRE(db_hash.has_value());
+        REQUIRE(memcmp(hash.bytes, db_hash.value().bytes, sizeof(hash)) == 0);
+
+        // Read non existent canonical header hash
+        db_hash = read_canonical_header_hash(txn, block_num + 1);
+        REQUIRE(db_hash.has_value() == false);
+
         std::optional<BlockHeader> header_from_db{read_header(txn, header.number, hash.bytes)};
         REQUIRE(header_from_db.has_value());
         CHECK(*header_from_db == header);
@@ -492,24 +501,27 @@ namespace db {
         block1.header.number = 1;
         block1.header.beneficiary = miner_a;
         // miner_a gets one block reward
-        REQUIRE(execute_block(block1, buffer, kMainnetConfig) == ValidationResult::kOk);
+        REQUIRE(execute_block(block1, buffer, test::kFrontierConfig) == ValidationResult::kOk);
 
         Block block2;
         block2.header.number = 2;
         block2.header.beneficiary = miner_b;
         // miner_a gets nothing
-        REQUIRE(execute_block(block2, buffer, kMainnetConfig) == ValidationResult::kOk);
+        REQUIRE(execute_block(block2, buffer, test::kFrontierConfig) == ValidationResult::kOk);
 
         Block block3;
         block3.header.number = 3;
         block3.header.beneficiary = miner_a;
         // miner_a gets another block reward
-        REQUIRE(execute_block(block3, buffer, kMainnetConfig) == ValidationResult::kOk);
+        REQUIRE(execute_block(block3, buffer, test::kFrontierConfig) == ValidationResult::kOk);
 
         buffer.write_to_db();
+        db::stages::write_stage_progress(txn, db::stages::kExecutionKey, 3);
 
         db::RWTxn tm{txn};
-        REQUIRE(stagedsync::stage_account_history(tm, context.dir().etl().path()) == stagedsync::StageResult::kSuccess);
+        stagedsync::SyncContext sync_context{};
+        stagedsync::HistoryIndex stage_history_index(&context.node_settings(), &sync_context);
+        REQUIRE(stage_history_index.forward(tm) == stagedsync::Stage::Result::kSuccess);
 
         std::optional<Account> current_account{read_account(txn, miner_a)};
         REQUIRE(current_account.has_value());
@@ -517,7 +529,7 @@ namespace db {
 
         std::optional<Account> historical_account{read_account(txn, miner_a, /*block_number=*/2)};
         REQUIRE(historical_account.has_value());
-        CHECK(historical_account->balance == param::kBlockRewardFrontier);
+        CHECK(intx::to_string(historical_account->balance) == std::to_string(param::kBlockRewardFrontier));
     }
 
     TEST_CASE("read_storage") {
@@ -695,18 +707,17 @@ namespace db {
 
         auto canonical_hashes{db::open_cursor(txn, table::kCanonicalHashes)};
         const Bytes genesis_block_key{block_key(0)};
-        const auto ropsten_genesis_hash{0x41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d_bytes32};
-        canonical_hashes.upsert(to_slice(genesis_block_key), to_slice(ropsten_genesis_hash));
+        canonical_hashes.upsert(to_slice(genesis_block_key), to_slice(kSepoliaGenesisHash));
 
         const auto chain_config2{read_chain_config(txn)};
         CHECK(chain_config2 == std::nullopt);
 
         auto config_table{db::open_cursor(txn, table::kConfig)};
-        const std::string ropsten_config_json{kRopstenConfig.to_json().dump()};
-        config_table.upsert(to_slice(ropsten_genesis_hash), mdbx::slice{ropsten_config_json.c_str()});
+        const std::string sepolia_config_json{kSepoliaConfig.to_json().dump()};
+        config_table.upsert(to_slice(kSepoliaGenesisHash), mdbx::slice{sepolia_config_json.c_str()});
 
         const auto chain_config3{read_chain_config(txn)};
-        CHECK(chain_config3 == kRopstenConfig);
+        CHECK(chain_config3 == kSepoliaConfig);
     }
 
     TEST_CASE("Head header") {
@@ -714,9 +725,8 @@ namespace db {
         auto& txn{context.txn()};
 
         REQUIRE(db::read_head_header_hash(txn) == std::nullopt);
-        const auto ropsten_genesis_hash{0x41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d_bytes32};
-        REQUIRE_NOTHROW(db::write_head_header_hash(txn, ropsten_genesis_hash.bytes));
-        REQUIRE(db::read_head_header_hash(txn).value() == ropsten_genesis_hash);
+        REQUIRE_NOTHROW(db::write_head_header_hash(txn, kSepoliaGenesisHash));
+        REQUIRE(db::read_head_header_hash(txn).value() == kSepoliaGenesisHash);
     }
 
 }  // namespace db

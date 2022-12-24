@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_EXECUTION_PROCESSOR_HPP_
-#define SILKWORM_EXECUTION_PROCESSOR_HPP_
+#pragma once
 
 #include <cstdint>
 #include <vector>
@@ -47,7 +46,7 @@ class ExecutionProcessor {
 
     //! \brief Execute the block and write the result to the DB.
     //! \remarks Warning: This method does not verify state root; pre-Byzantium receipt root isn't validated either.
-    //! \pre consensus_engine's pre_validate_block(block) must return kOk.
+    //! \pre consensus_engine's validate_block_header & pre_validate_block_body must return kOk.
     [[nodiscard]] ValidationResult execute_and_write_block(std::vector<Receipt>& receipts) noexcept;
 
     uint64_t cumulative_gas_used() const noexcept { return cumulative_gas_used_; }
@@ -58,11 +57,11 @@ class ExecutionProcessor {
   private:
     /// Execute the block, but do not write to the DB yet.
     /// Does not perform any post-execution validation (for example, receipt root is not checked).
-    /// Precondition: pre_validate_block(block) must return kOk.
+    /// Precondition: validate_block_header & pre_validate_block_body must return kOk.
     [[nodiscard]] ValidationResult execute_block_no_post_validation(std::vector<Receipt>& receipts) noexcept;
 
     uint64_t available_gas() const noexcept;
-    uint64_t refund_gas(const Transaction& txn, uint64_t gas_left) noexcept;
+    uint64_t refund_gas(const Transaction& txn, uint64_t gas_left, uint64_t refund_gas) noexcept;
 
     uint64_t cumulative_gas_used_{0};
     IntraBlockState state_;
@@ -71,5 +70,3 @@ class ExecutionProcessor {
 };
 
 }  // namespace silkworm
-
-#endif  // SILKWORM_EXECUTION_PROCESSOR_HPP_

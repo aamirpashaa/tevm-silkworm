@@ -1,5 +1,5 @@
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_RANDOM_NUMBER_HPP
-#define SILKWORM_RANDOM_NUMBER_HPP
+#pragma once
 #include <random>
 
 #include "singleton.hpp"
@@ -32,7 +31,7 @@ class RandomNumber {
         generator_.seed(rd());  // init generator_ with a random seed
     }
 
-    RandomNumber(uint64_t a, uint64_t b): distr_(a,b) {
+    RandomNumber(uint64_t a, uint64_t b) : distr_(a, b) {
         std::random_device rd;
         generator_.seed(rd());  // init generator_ with a random seed
     }
@@ -43,4 +42,3 @@ class RandomNumber {
 #define RANDOM_NUMBER default_instantiating::Singleton<RandomNumber>::instance()
 
 }  // namespace silkworm
-#endif  // SILKWORM_RANDOM_NUMBER_HPP

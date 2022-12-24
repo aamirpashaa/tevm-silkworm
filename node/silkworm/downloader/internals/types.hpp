@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_TYPES_HPP
-#define SILKWORM_TYPES_HPP
+#pragma once
 
 #include <chrono>
 
@@ -43,7 +42,7 @@ class Hash : public evmc::bytes32 {
     static constexpr size_t length() { return sizeof(evmc::bytes32); }
 
     std::string to_hex() { return silkworm::to_hex(*this); }
-    static Hash from_hex(const std::string& hex) { return {evmc::literals::internal::from_hex<bytes32>(hex.c_str())}; }
+    static Hash from_hex(const std::string& hex) { return {evmc::from_hex<Hash>(hex).value()}; }
 
     // conversion to ByteView is handled in ByteView class,
     // conversion operator Byte() { return {bytes, length()}; } is handled elsewhere
@@ -77,7 +76,12 @@ inline std::ostream& operator<<(std::ostream& out, const evmc::bytes32& b32) {
     return out;
 }
 
-using PeerId = std::string;
+using PeerId = Bytes;
+
+// Bytes already has operator<<, so PeerId but PeerId is too long
+inline Bytes human_readable_id(const PeerId& peer_id) {
+    return {peer_id.data(), std::min<size_t>(peer_id.length(), 20)};
+}
 
 enum Penalty : int {
     NoPenalty = 0,
@@ -127,5 +131,3 @@ struct hash<silkworm::Hash> : public std::hash<evmc::bytes32>  // to use Hash wi
 {};
 
 }  // namespace std
-
-#endif  // SILKWORM_TYPES_HPP

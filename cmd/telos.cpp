@@ -1,12 +1,9 @@
 /*
-   Copyright 2021 The Silkworm Authors
-
+   Copyright 2022 The Silkworm Authors
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
-
        http://www.apache.org/licenses/LICENSE-2.0
-
    Unless required by applicable law or agreed to in writing, software
    distributed under the License is distributed on an "AS IS" BASIS,
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,56 +14,59 @@
 #include <iostream>
 #include <string>
 #include <thread>
-#include <fstream>
 
 #include <CLI/CLI.hpp>
 
 #include <silkworm/buildinfo.h>
-#include <silkworm/common/measure.hpp>
-#include <silkworm/common/settings.hpp>
-#include <silkworm/common/directories.hpp>
 #include <silkworm/common/log.hpp>
-#include <silkworm/common/util.hpp>
-#include <silkworm/downloader/internals/header_retrieval.hpp>
-#include <silkworm/downloader/internals/body_persistence.hpp>
-#include <silkworm/downloader/internals/body_sequence.hpp>
-#include <silkworm/downloader/stage_headers.hpp>
-#include <silkworm/downloader/stage_bodies.hpp>
+#include <silkworm/common/settings.hpp>
+#include <silkworm/concurrency/signal_handler.hpp>
+#include <silkworm/db/access_layer.hpp>
+#include <silkworm/stagedsync/stage.hpp>
+#include <silkworm/stagedsync/stage_bodies.hpp>
+#include <silkworm/stagedsync/stage_headers.hpp>
 #include <silkworm/consensus/base/engine.hpp>
 #include <silkworm/state/in_memory_state.hpp>
 #include <silkworm/execution/processor.hpp>
 #include <silkworm/trie/vector_root.hpp>
-#include <silkworm/execution/telosevm.hpp>
+#include <silkworm/downloader/internals/body_persistence.hpp>
+#include <silkworm/downloader/internals/header_persistence.hpp>
+#include <silkworm/downloader/internals/header_retrieval.hpp>
 
 #include "common.hpp"
 
 using namespace silkworm;
+using namespace silkworm::stagedsync;
+
+bool unwind_needed(Stage::Result result) {
+    return (result == Stage::Result::kWrongFork || result == Stage::Result::kInvalidBlock);
+}
+
+bool error_or_abort(Stage::Result result) {
+    return (result == Stage::Result::kUnexpectedError || result == Stage::Result::kAborted);
+}
 
 // stage-loop, forwarding phase
 using LastStage = size_t;
-template <size_t N>
-std::tuple<Stage::Result, LastStage> forward(std::array<Stage*, N> stages, bool first_sync) {
-    using Status = Stage::Result;
-    Stage::Result result;
+std::tuple<Stage::Result, LastStage> forward(std::vector<Stage*> stages, db::RWTxn& txn) {
+    Stage::Result result{Stage::Result::kUnspecified};
 
-    for(size_t i = 0; i < N; i++) {
-        result = stages[i]->forward(first_sync);
-        if (result.status == Status::UnwindNeeded) {
+    for (size_t i = 0; i < stages.size(); ++i) {
+        result = stages[i]->forward(txn);
+        if (unwind_needed(result)) {
             return {result, i};
         }
     }
-    return {result, N-1};
+    return {result, stages.size() - 1};
 }
 
 // stage-loop, unwinding phase
-template <size_t N>
-Stage::Result unwind(std::array<Stage*, N> stages, BlockNum unwind_point, Hash bad_block, LastStage last_stage) {
-    using Status = Stage::Result;
-    Stage::Result result;
+Stage::Result unwind(std::vector<Stage*> stages, LastStage last_stage, db::RWTxn& txn) {
+    Stage::Result result{Stage::Result::kUnspecified};
 
-    for(size_t i = last_stage; i <= 0; i--) { // reverse loop
-        result = stages[i]->unwind_to(unwind_point, bad_block);
-        if (result.status == Status::Error) {
+    for (size_t i = last_stage; i <= 0; --i) {  // reverse loop
+        result = stages[i]->unwind(txn);
+        if (error_or_abort(result)) {
             break;
         }
     }
@@ -74,6 +74,25 @@ Stage::Result unwind(std::array<Stage*, N> stages, BlockNum unwind_point, Hash b
     return result;
 }
 
+// progress log
+class ProgressLog : public ActiveComponent {
+    std::vector<Stage*> stages_;
+
+  public:
+    ProgressLog(std::vector<Stage*>& stages) : stages_(stages) {}
+
+    void execution_loop() override {  // this is only a trick to avoid using asio timers, this is only test code
+        using namespace std::chrono;
+        log::set_thread_name("progress-log  ");
+        while (!is_stopping()) {
+            std::this_thread::sleep_for(30s);
+            for (auto stage : stages_) {
+                auto progress = stage->get_log_progress();
+                log::Message(stage->name(), progress);
+            }
+        }
+    }
+};
 
 evmc::bytes32 CalculateReceiptsRootAndSetGasUsed(Block &block,InMemoryState &state) {
     auto engine{consensus::engine_factory(kTelosEVMMainnetConfig)};
@@ -102,51 +121,48 @@ int main(int argc, char* argv[]) {
     int return_value = 0;
 
     try {
-    NodeSettings node_settings{};
-    node_settings.sentry_api_addr = "127.0.0.1:9091";
+        cmd::SilkwormCoreSettings settings;
+        auto& log_settings = settings.log_settings;
+        auto& node_settings = settings.node_settings;
 
-    log::Settings log_settings;
-    log_settings.log_threads = true;
-    log_settings.log_file = "downloader.log";
-    log_settings.log_verbosity = log::Level::kInfo;
-    log_settings.log_thousands_sep = '\'';
+        log_settings.log_threads = true;
+        log_settings.log_file = "downloader.log";
+        log_settings.log_verbosity = log::Level::kInfo;
+        log_settings.log_thousands_sep = '\'';
+        log::set_thread_name("main          ");
 
-    // test & measurement only parameters [to remove]
-    BodySequence::kMaxBlocksPerMessage = 128;
-    BodySequence::kPerPeerMaxOutstandingRequests = 4;
-    int requestDeadlineSeconds = 30; // BodySequence::kRequestDeadline = std::chrono::seconds(30);
-    int noPeerDelayMilliseconds = 1000;  // BodySequence::kNoPeerDelay = std::chrono::milliseconds(1000)
+        // test & measurement only parameters [to remove]
+        int requestDeadlineSeconds = 30;     // BodySequence::kRequestDeadline = std::chrono::seconds(30);
+        int noPeerDelayMilliseconds = 1000;  // BodySequence::kNoPeerDelay = std::chrono::milliseconds(1000)
 
-    app.add_option("--max_blocks_per_req", BodySequence::kMaxBlocksPerMessage,
+        app.add_option("--max_blocks_per_req", BodySequence::kMaxBlocksPerMessage,
                        "Max number of blocks requested to peers in a single request")
             ->capture_default_str();
-    app.add_option("--max_requests_per_peer", BodySequence::kPerPeerMaxOutstandingRequests,
+        app.add_option("--max_requests_per_peer", BodySequence::kPerPeerMaxOutstandingRequests,
                        "Max number of pending request made to each peer")
             ->capture_default_str();
-    app.add_option("--request_deadline_s", requestDeadlineSeconds,
+        app.add_option("--request_deadline_s", requestDeadlineSeconds,
                        "Time (secs) after which a response is considered lost and will be re-tried")
             ->capture_default_str();
-    app.add_option("--no_peer_delay_ms", noPeerDelayMilliseconds,
+        app.add_option("--no_peer_delay_ms", noPeerDelayMilliseconds,
                        "Time (msecs) to wait before making a new request when no peer accepted the last")
             ->capture_default_str();
 
-    BodySequence::kRequestDeadline = std::chrono::seconds(requestDeadlineSeconds);
-    BodySequence::kNoPeerDelay = std::chrono::milliseconds(noPeerDelayMilliseconds);
-    // test & measurement only parameters end
+        BodySequence::kRequestDeadline = std::chrono::seconds(requestDeadlineSeconds);
+        BodySequence::kNoPeerDelay = std::chrono::milliseconds(noPeerDelayMilliseconds);
+        // test & measurement only parameters end
 
-    // Command line parsing
-    cmd::parse_silkworm_command_line(app, argc, argv, log_settings, node_settings);
+        // Command line parsing
+        cmd::parse_silkworm_command_line(app, argc, argv, settings);
 
-    log::init(log_settings);
-    log::set_thread_name("stage-loop    ");
+        log::init(log_settings);
+        log::set_thread_name("stage-loop    ");
 
         // Output BuildInfo
         auto build_info{silkworm_get_buildinfo()};
-        log::Message("SILKWORM DOWNLOADER", {
-            "version", std::string(build_info->git_branch) + std::string(build_info->project_version),
-            "build", std::string(build_info->system_name) + "-" + std::string(build_info->system_processor)
-                             + " " + std::string(build_info->build_type),
-            "compiler", std::string(build_info->compiler_id) + " " + std::string(build_info->compiler_version)});
+        log::Message("SILKWORM DOWNLOADER", {"version", std::string(build_info->git_branch) + std::string(build_info->project_version),
+                                             "build", std::string(build_info->system_name) + "-" + std::string(build_info->system_processor) + " " + std::string(build_info->build_type),
+                                             "compiler", std::string(build_info->compiler_id) + " " + std::string(build_info->compiler_version)});
 
         log::Message("BlockExchange parameter", {"--max_blocks_per_req", to_string(BodySequence::kMaxBlocksPerMessage)});
         log::Message("BlockExchange parameter", {"--max_requests_per_peer", to_string(BodySequence::kPerPeerMaxOutstandingRequests)});
@@ -155,33 +171,12 @@ int main(int argc, char* argv[]) {
 
         // Prepare database
         cmd::run_preflight_checklist(node_settings);
-
-        // EIP-2124 based chain identity scheme (networkId + genesis + forks)
-        ChainIdentity chain_identity;
-        if (node_settings.chain_config->chain_id == ChainIdentity::mainnet.chain.chain_id)
-            chain_identity = ChainIdentity::mainnet;
-        else if (node_settings.chain_config->chain_id == ChainIdentity::telosevmmainnet.chain.chain_id)
-            chain_identity = ChainIdentity::telosevmmainnet;
-        else if (node_settings.chain_config->chain_id == ChainIdentity::telosevmtestnet.chain.chain_id)
-            chain_identity = ChainIdentity::telosevmtestnet;
-        else // for Rinkey & Goerli we have not implemented the consensus engine yet; for Ropsten we lack genesis json file
-            throw std::logic_error("Chain id=" + std::to_string(node_settings.chain_config->chain_id) + " not supported");
-
-        log::Message("Chain/db status", {"chain-id", to_string(chain_identity.chain.chain_id)});
-        log::Message("Chain/db status", {"genesis_hash", to_hex(chain_identity.genesis_hash)});
-        log::Message("Chain/db status", {"hard-forks", to_string(chain_identity.distinct_fork_numbers().size())});
+        log::Message("Chain Identity", {"id", std::to_string(node_settings.chain_config->chain_id),
+                                        "genesis", to_hex(node_settings.chain_config->genesis_hash.value(), true),
+                                        "hard-forks", std::to_string(node_settings.chain_config->distinct_fork_numbers().size())});
 
         // Database access
-        Db db{node_settings.chaindata_env_config};
-
-        // Node current status
-        HeaderRetrieval headers(Db::ReadOnlyAccess{db});
-        auto [head_hash, head_td] = headers.head_hash_and_total_difficulty();
-        auto head_height = headers.head_height();
-
-        log::Message("Chain/db status", {"head hash", head_hash.to_hex()});
-        log::Message("Chain/db status", {"head td", intx::to_string(head_td)});
-        log::Message("Chain/db status", {"head height", to_string(head_height)});
+        mdbx::env_managed db = db::open_env(node_settings.chaindata_env_config);
 
         // silkworm::TelosEVM tevm{};
         // tevm.push(intx::uint256{25});
@@ -192,6 +187,11 @@ int main(int argc, char* argv[]) {
         std::ifstream blockdumpfile("/mnt2/TelosWorks/read-state-history/dump-block.dat");
         std::ifstream accountdumpfile("/mnt2/TelosWorks/read-state-history/account_table.dat");
         
+        db::RWAccess db_access(db);
+        HeaderRetrieval headers(db_access);
+        auto [head_hash, head_td] = headers.head_hash_and_total_difficulty();
+        auto head_height = headers.head_height();
+        headers.close();
         
         Hash lastblockhash = head_hash;
         std::string line,line2,line3;
@@ -217,7 +217,7 @@ int main(int argc, char* argv[]) {
                 break;
             }
         }
-        auto db_access = Db::ReadWriteAccess{db};
+        
         std::vector<Block> temp_blocks;
         InMemoryState state;
         do {
@@ -231,7 +231,7 @@ int main(int argc, char* argv[]) {
             // if (blocknum > "180840052") {
             //     break;
             // }
-            if (blocknum > "181142509") {
+            if (blocknum > "180840052") {
                 break;
             }
             intx::uint128 trx_index = 0;
@@ -389,8 +389,10 @@ int main(int argc, char* argv[]) {
             lastblockhash = block.header.hash();
             std::cout<<block.header.number<<" "<<block.header.hash()<<std::endl;
             temp_blocks.push_back(block);
-            
+            Bytes block_header_bytes;
+            rlp::encode(block_header_bytes,block.header);
             if (blocknum == "180840052") {
+                std::cout<<"Raw:"<<to_hex(block_header_bytes)<<std::endl;
                 std::cout<<"Transaction Count:"<<block.transactions.size()<<std::endl;
                 std::cout<<"parent_hash:"<<block.header.parent_hash<<std::endl;
                 std::cout<<"ommers_hash:"<<block.header.ommers_hash<<std::endl;
@@ -414,6 +416,7 @@ int main(int argc, char* argv[]) {
                     auto txn_hash{keccak256(txn_data)};
                     ByteView txn_hash_view{txn_hash.bytes};
                     std::cout<<"######################"<<std::endl;
+                    std::cout<<"- raw:"<<to_hex(txn_data)<<std::endl;
                     std::cout<<"- hash:"<<to_hex(txn_hash_view)<<std::endl;
                     std::cout<<"- nonce:"<<txn.nonce<<std::endl;
                     std::cout<<"- gas_limit:"<<txn.gas_limit<<std::endl;
@@ -429,38 +432,38 @@ int main(int argc, char* argv[]) {
                 }
             }
             if (block.header.number%1000 == 0) {
-                Db::ReadWriteAccess::Tx tx1 = db_access.start_tx();
+                db::RWTxn tx1 = db_access.start_rw_tx();
                 HeaderPersistence header_persistence(tx1);
                 for (Block b:temp_blocks) {
                     header_persistence.persist(b.header);
                 }
-                header_persistence.close();
+                header_persistence.finish();
                 log::Info() << "Header persistence after height=" << header_persistence.highest_height();
-                tx1.commit();
-                Db::ReadWriteAccess::Tx tx2 = db_access.start_tx();
-                BodyPersistence body_persistence(tx2, chain_identity);
+                tx1.commit(false);
+                db::RWTxn tx2 = db_access.start_rw_tx();
+                BodyPersistence body_persistence(tx2, node_settings.chain_config.value());
                 body_persistence.persist(temp_blocks);
                 body_persistence.close();
                 log::Info() << "Body persistence after height=" << body_persistence.highest_height();
-                tx2.commit();
+                tx2.commit(false);
                 temp_blocks.clear();
             }
         } while (std::getline(blockdumpfile, line));
         if (!temp_blocks.empty()) {
-            Db::ReadWriteAccess::Tx tx1 = db_access.start_tx();
+            db::RWTxn tx1 = db_access.start_rw_tx();
             HeaderPersistence header_persistence(tx1);
             for (Block b:temp_blocks) {
                 header_persistence.persist(b.header);
             }
-            header_persistence.close();
+            header_persistence.finish();
             log::Info() << "Header persistence after height=" << header_persistence.highest_height();
-            tx1.commit();
-            Db::ReadWriteAccess::Tx tx2 = db_access.start_tx();
-            BodyPersistence body_persistence(tx2, chain_identity);
+            tx1.commit(false);
+            db::RWTxn tx2 = db_access.start_rw_tx();
+            BodyPersistence body_persistence(tx2, node_settings.chain_config.value());
             body_persistence.persist(temp_blocks);
             body_persistence.close();
             log::Info() << "Body persistence after height=" << body_persistence.highest_height();
-            tx2.commit();
+            tx2.commit(false);
             temp_blocks.clear();
         }
         std::cout<<"SALAM"<<std::endl;
@@ -544,50 +547,80 @@ int main(int argc, char* argv[]) {
         // return 0;
 
         // Sentry client - connects to sentry
-        SentryClient sentry{node_settings.sentry_api_addr};
-        sentry.set_status(head_hash, head_td, chain_identity);
-        sentry.hand_shake();
+        SentryClient sentry{node_settings.external_sentry_addr, db::ROAccess{db}, node_settings.chain_config.value()};
         auto message_receiving = std::thread([&sentry]() { sentry.execution_loop(); });
         auto stats_receiving = std::thread([&sentry]() { sentry.stats_receiving_loop(); });
 
         // BlockExchange - download headers and bodies from remote peers using the sentry
-        BlockExchange block_exchange{sentry, Db::ReadOnlyAccess{db}, chain_identity};
+        BlockExchange block_exchange{sentry, db::ROAccess{db}, node_settings.chain_config.value()};
         auto block_downloading = std::thread([&block_exchange]() { block_exchange.execution_loop(); });
 
-        // Stage1 - Header downloader - example code
-        bool first_sync = true;  // = starting up silkworm
-        // HeadersStage header_stage{Db::ReadWriteAccess{db}, block_exchange};
-        BodiesStage body_stage{Db::ReadWriteAccess{db}, block_exchange};
+        // Stages shared state
+        SyncContext shared_status;
+        shared_status.is_first_cycle = true;  // = starting up silkworm
+
+        // Stages 1 & 2 - Headers and bodies downloading - example code
+        HeadersStage header_stage{&shared_status, block_exchange, &node_settings};
+        BodiesStage body_stage{&shared_status, block_exchange, &node_settings};
+
+        header_stage.set_log_prefix("[1/2 Headers]");
+        body_stage.set_log_prefix("[2/2 Bodies]");
+
+        // Trap os signals
+        SignalHandler::init();
+        //        SignalHandler::init([&](int) {
+        //            log::Info() << "Requesting threads termination\n";
+        //            header_stage.stop();
+        //            body_stage.stop();
+        //            block_exchange.stop();
+        //            sentry.stop();
+        //        });
 
         // Sample stage loop with 2 stages
-        std::array<Stage*, 1> stages = {&body_stage};
+        std::vector<Stage*> stages = {&header_stage, &body_stage};
 
-        using Status = Stage::Result;
-        Stage::Result result{Status::Unspecified};
+        ProgressLog progress_log(stages);
+        auto progress_displaying = std::thread([&progress_log]() {
+            progress_log.execution_loop();
+        });
+
+        Stage::Result result{Stage::Result::kUnspecified};
         size_t last_stage = 0;
 
         do {
-            std::tie(result, last_stage) = forward(stages, first_sync);
+            db::RWTxn txn = db_access.start_rw_tx();
 
-            if (result.status == Status::UnwindNeeded) {
-                result = unwind(stages, *result.unwind_point, *result.bad_block, last_stage);
+            std::tie(result, last_stage) = forward(stages, txn);
+
+            if (unwind_needed(result)) {
+                result = unwind(stages, last_stage, txn);
             }
 
-            first_sync = false;
-        } while (result.status != Status::Error);
+            shared_status.is_first_cycle = false;
+        } while (!error_or_abort(result) && !SignalHandler::signalled());
 
-        cout << "Downloader stage-loop ended\n";
+        log::Info() << "Downloader stage-loop ended\n";
 
+        // Signal exiting
+        progress_log.stop();
+        header_stage.stop();
+        body_stage.stop();
+        block_exchange.stop();
         // Wait threads termination
-        block_exchange.stop();     // signal exiting
+        log::Info() << "Waiting threads termination\n";
+        progress_displaying.join();
+        block_downloading.join();
         message_receiving.join();
         stats_receiving.join();
-        block_downloading.join();
-    }
-    catch (const CLI::ParseError& ex) {
+
+        log::Info() << "Closing db\n";
+        db.close();
+
+        log::Info() << "Downloader terminated\n";
+
+    } catch (const CLI::ParseError& ex) {
         return_value = app.exit(ex);
-    }
-    catch (std::exception& e) {
+    } catch (std::exception& e) {
         cerr << "Exception (type " << typeid(e).name() << "): " << e.what() << "\n";
         return_value = 1;
     }

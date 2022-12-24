@@ -1,17 +1,17 @@
 /*
-Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+       http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
 */
 
 #include "body_sequence.hpp"
@@ -21,10 +21,9 @@ limitations under the License.
 #include <catch2/catch.hpp>
 
 #include <silkworm/chain/genesis.hpp>
+#include <silkworm/common/cast.hpp>
 #include <silkworm/common/test_context.hpp>
 #include <silkworm/db/genesis.hpp>
-
-#include "body_sequence.hpp"
 
 namespace silkworm {
 // Useful definitions
@@ -35,10 +34,10 @@ class BodySequence_ForTest : public BodySequence {
     // inheriting constructor
     using BodySequence::BodySequence;
     // publication of internal members to test methods functioning
+    using BodySequence::announced_blocks_;
     using BodySequence::body_requests_;
     using BodySequence::BodyRequest;
     using BodySequence::outstanding_bodies;
-    using BodySequence::announced_blocks_;
 };
 
 TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
@@ -51,10 +50,11 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
 
     bool allow_exceptions = false;
 
-    auto chain_identity = ChainIdentity::mainnet;
+    auto chain_config{kMainnetConfig};
+    chain_config.genesis_hash.emplace(kMainnetGenesisHash);
 
     // add genesis to db
-    auto source_data = silkworm::read_genesis_data(chain_identity.chain.chain_id);
+    auto source_data = silkworm::read_genesis_data(chain_config.chain_id);
     auto genesis_json = nlohmann::json::parse(source_data, nullptr, allow_exceptions);
     db::initialize_genesis(txn, genesis_json, allow_exceptions);
 
@@ -90,12 +90,12 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
     // Note: block1 has zero transactions and zero ommers on mainnet
 
     // prepare BodySequence
-    Db::ReadWriteAccess dba(context.env());
+    db::RWAccess dba(context.env());
 
     BlockNum highest_header = 1;
     BlockNum highest_body = 0;
 
-    BodySequence_ForTest bs(dba, chain_identity);
+    BodySequence_ForTest bs(dba);
 
     BodySequence::kMaxBlocksPerMessage = 32;
     BodySequence::kPerPeerMaxOutstandingRequests = 4;
@@ -108,9 +108,7 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
     seconds_t request_timeout = BodySequence::kRequestDeadline;
     uint64_t active_peers = 1;
 
-
     SECTION("should request block 1 & should accept it") {
-
         // check status
         REQUIRE(bs.highest_block_in_db() == highest_body);
         REQUIRE(bs.target_height() == highest_header);
@@ -143,7 +141,7 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
         REQUIRE(bs.lowest_block_in_memory() == 1);
 
         // accepting
-        PeerId peer_id{"1"};
+        PeerId peer_id{byte_ptr_cast("1")};
         BlockBodiesPacket66 response_packet;
         response_packet.requestId = packet.requestId;
         response_packet.request.push_back(block1);
@@ -153,12 +151,12 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
         REQUIRE(penalty == NoPenalty);
         REQUIRE(request_status.ready);
         REQUIRE(request_status.body == block1);
-        REQUIRE(request_status.block_height == 1); // same as before
-        REQUIRE(request_status.block_hash == header1_hash); // same as before
-        REQUIRE(request_status.header == header1); // same as before
+        REQUIRE(request_status.block_height == 1);           // same as before
+        REQUIRE(request_status.block_hash == header1_hash);  // same as before
+        REQUIRE(request_status.header == header1);           // same as before
 
-        REQUIRE(bs.highest_block_in_memory() == 1); // same as before
-        REQUIRE(bs.lowest_block_in_memory() == 1); // same as before
+        REQUIRE(bs.highest_block_in_memory() == 1);  // same as before
+        REQUIRE(bs.lowest_block_in_memory() == 1);   // same as before
 
         // check statistics
         auto& statistic = bs.statistics();
@@ -178,7 +176,7 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
         REQUIRE(request_status1.request_time == tp);
         REQUIRE(request_status1.ready == false);
 
-        request_status1.request_time -= request_timeout; // make request stale
+        request_status1.request_time -= request_timeout;  // make request stale
 
         // make another request
         auto [packet2, penalizations2, min_block2] = bs.request_more_bodies(tp, active_peers);
@@ -216,21 +214,21 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
         block1tampered.transactions[0].gas_limit = 90'000;
         block1tampered.transactions[0].to = 0xe5ef458d37212a06e3f59d40c454e76150ae7c32_address;
 
-        PeerId peer_id{"1"};
+        PeerId peer_id{byte_ptr_cast("1")};
         BlockBodiesPacket66 response_packet;
-        response_packet.requestId = packet.requestId; // correct request-id
-        response_packet.request.push_back(block1tampered); // wrong body
+        response_packet.requestId = packet.requestId;       // correct request-id
+        response_packet.request.push_back(block1tampered);  // wrong body
 
         [[maybe_unused]] auto penalty = bs.accept_requested_bodies(response_packet, peer_id);
 
-        //REQUIRE(penalty == BadBlockPenalty); // for now we choose to not penalize the peer
+        // REQUIRE(penalty == BadBlockPenalty); // for now we choose to not penalize the peer
         REQUIRE(!request_status.ready);
-        REQUIRE(request_status.block_height == 1); // same as before
-        REQUIRE(request_status.block_hash == header1_hash); // same as before
-        REQUIRE(request_status.header == header1); // same as before
+        REQUIRE(request_status.block_height == 1);           // same as before
+        REQUIRE(request_status.block_hash == header1_hash);  // same as before
+        REQUIRE(request_status.header == header1);           // same as before
 
-        REQUIRE(bs.highest_block_in_memory() == 1); // same as before
-        REQUIRE(bs.lowest_block_in_memory() == 1); // same as before
+        REQUIRE(bs.highest_block_in_memory() == 1);  // same as before
+        REQUIRE(bs.lowest_block_in_memory() == 1);   // same as before
 
         auto& statistic = bs.statistics();
         REQUIRE(statistic.requested_items == 1);
@@ -249,7 +247,7 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
         REQUIRE(request_status.block_height == 1);
 
         // accepting
-        PeerId peer_id{"1"};
+        PeerId peer_id{byte_ptr_cast("1")};
         BlockBodiesPacket66 response_packet;
         response_packet.requestId = packet.requestId;
         response_packet.request.push_back(block1);
@@ -259,14 +257,14 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
         // another one
         auto penalty = bs.accept_requested_bodies(response_packet, peer_id);
 
-        REQUIRE(penalty == NoPenalty); // correct?
-        REQUIRE(request_status.ready); // same as before
-        REQUIRE(request_status.block_height == 1); // same as before
-        REQUIRE(request_status.block_hash == header1_hash); // same as before
-        REQUIRE(request_status.header == header1); // same as before
+        REQUIRE(penalty == NoPenalty);                       // correct?
+        REQUIRE(request_status.ready);                       // same as before
+        REQUIRE(request_status.block_height == 1);           // same as before
+        REQUIRE(request_status.block_hash == header1_hash);  // same as before
+        REQUIRE(request_status.header == header1);           // same as before
 
-        REQUIRE(bs.highest_block_in_memory() == 1); // same as before
-        REQUIRE(bs.lowest_block_in_memory() == 1); // same as before
+        REQUIRE(bs.highest_block_in_memory() == 1);  // same as before
+        REQUIRE(bs.lowest_block_in_memory() == 1);   // same as before
 
         auto& statistic = bs.statistics();
         REQUIRE(statistic.requested_items == 1);
@@ -287,15 +285,15 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
         // in real life the request can become stale and can be renewed
         // but if the peer is slow we will get a response to the old request
 
-        PeerId peer_id{"1"};
+        PeerId peer_id{byte_ptr_cast("1")};
         BlockBodiesPacket66 response_packet;
-        response_packet.requestId = packet.requestId-1; // simulate response to prev request
+        response_packet.requestId = packet.requestId - 1;  // simulate response to prev request
         response_packet.request.push_back(block1);
 
         auto penalty = bs.accept_requested_bodies(response_packet, peer_id);
 
         REQUIRE(penalty == NoPenalty);
-        REQUIRE(request_status.ready); // accepted
+        REQUIRE(request_status.ready);  // accepted
         REQUIRE(request_status.block_height == 1);
         REQUIRE(request_status.block_hash == header1_hash);
         REQUIRE(request_status.header == header1);
@@ -312,7 +310,7 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
     }
 
     SECTION("should not renew recent requests") {
-        REQUIRE(highest_header == 1);   // test pre-requisite
+        REQUIRE(highest_header == 1);  // test pre-requisite
 
         // requesting
         auto [packet1, penalizations1, min_block1] = bs.request_more_bodies(tp, active_peers);
@@ -327,7 +325,7 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
         // make another request in the same time
         auto [packet2, penalizations2, min_block2] = bs.request_more_bodies(tp, active_peers);
 
-        REQUIRE(packet2.request.empty());   // no new request, highest_header == 1 and we already requested body 1
+        REQUIRE(packet2.request.empty());  // no new request, highest_header == 1 and we already requested body 1
         REQUIRE(bs.body_requests_.size() == 1);
 
         // statistics
@@ -339,7 +337,7 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
     }
 
     SECTION("should not make other requests after a nack") {
-        REQUIRE(highest_header == 1);   // test pre-requisite
+        REQUIRE(highest_header == 1);  // test pre-requisite
 
         // requesting
         auto [packet1, penalizations1, min_block1] = bs.request_more_bodies(tp, active_peers);
@@ -356,12 +354,12 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
         // submit nack
         bs.request_nack(packet1);
 
-        REQUIRE(statistic.requested_items == 0);    // reset
+        REQUIRE(statistic.requested_items == 0);  // reset
 
         // make another request in the same time
         auto [packet2, penalizations2, min_block2] = bs.request_more_bodies(tp, active_peers);
 
-        REQUIRE(packet2.request.empty());   // no new request, last was a nack
+        REQUIRE(packet2.request.empty());  // no new request, last was a nack
         REQUIRE(bs.body_requests_.size() == 1);
 
         // statistics
@@ -372,7 +370,7 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
     }
 
     SECTION("should not renew ready requests") {
-        REQUIRE(highest_header == 1);   // test pre-requisite
+        REQUIRE(highest_header == 1);  // test pre-requisite
 
         // requesting
         auto [packet1, penalizations1, min_block1] = bs.request_more_bodies(tp, active_peers);
@@ -384,13 +382,13 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
         REQUIRE(request_status1.request_time == tp);
         REQUIRE(request_status1.ready == false);
 
-        request_status1.ready = true; // mark as ready
-        tp += 2*BodySequence::kRequestDeadline;  // make it stale
+        request_status1.ready = true;              // mark as ready
+        tp += 2 * BodySequence::kRequestDeadline;  // make it stale
 
         // make another request in the same time
         auto [packet2, penalizations2, min_block2] = bs.request_more_bodies(tp, active_peers);
 
-        REQUIRE(packet2.request.empty());   // no new request, highest_header == 1 and we already requested body 1
+        REQUIRE(packet2.request.empty());  // no new request, highest_header == 1 and we already requested body 1
         REQUIRE(bs.body_requests_.size() == 1);
     }
 
@@ -427,7 +425,7 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
 
         // statistics
         auto& statistic = bs.statistics();
-        REQUIRE(statistic.requested_items == 1); // 1 and not 2 because sync_current_state() reset statistics
+        REQUIRE(statistic.requested_items == 1);  // 1 and not 2 because sync_current_state() reset statistics
         REQUIRE(statistic.received_items == 0);
         REQUIRE(statistic.accepted_items == 0);
         REQUIRE(statistic.rejected_items() == 0);
@@ -440,7 +438,7 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
         REQUIRE(bs.announced_blocks_.size() == 0);
 
         // accepting announcement
-        PeerId peer_id{"1"};
+        PeerId peer_id{byte_ptr_cast("1")};
         bs.accept_new_block(block1, peer_id);
         REQUIRE(bs.announced_blocks_.size() == 1);
 
@@ -456,7 +454,7 @@ TEST_CASE("body downloading", "[silkworm][downloader][BodySequence]") {
         REQUIRE(request_status.block_height == 1);
         REQUIRE(request_status.block_hash == header1_hash);
         REQUIRE(request_status.header == header1);
-        REQUIRE(request_status.ready == true); // found on announcements
+        REQUIRE(request_status.ready == true);  // found on announcements
 
         announcements_to_do = bs.announces_to_do();
         REQUIRE(!announcements_to_do.empty());

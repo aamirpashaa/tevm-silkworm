@@ -1,5 +1,5 @@
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,16 +14,17 @@
    limitations under the License.
 */
 
+#include "engine.hpp"
+
 #include <catch2/catch.hpp>
 
 #include <silkworm/common/test_util.hpp>
 
-#include "engine.hpp"
-
 namespace silkworm::consensus {
 
 static const ChainConfig kTestConfig{
-    1,  // chain_id
+    1,             // chain_id
+    std::nullopt,  // genesis_hash
     SealEngineType::kNoProof,
     {
         EVMC_HOMESTEAD,
@@ -42,7 +43,7 @@ TEST_CASE("Consensus Engine factory") {
     std::unique_ptr<IEngine> consensus_engine;
     consensus_engine = engine_factory(kMainnetConfig);  // Ethash consensus engine
     CHECK(consensus_engine != nullptr);
-    consensus_engine = engine_factory(kRopstenConfig);  // Ethash consensus engine
+    consensus_engine = engine_factory(kSepoliaConfig);  // Ethash consensus engine
     CHECK(consensus_engine != nullptr);
     consensus_engine = engine_factory(test::kLondonConfig);  // Noproof consensus engine
     CHECK(consensus_engine != nullptr);
@@ -57,10 +58,10 @@ TEST_CASE("Consensus Engine factory") {
 }
 
 TEST_CASE("Consensus Engine Seal") {
-    std::unique_ptr<IEngine> consensus_engine{engine_factory(kMainnetConfig)};  // Ethash consensus engine
+    std::unique_ptr<IEngine> consensus_engine{engine_factory(ChainConfig{.seal_engine = SealEngineType::kEthash})};
     BlockHeader fake_header{};
     CHECK(consensus_engine->validate_seal(fake_header) != ValidationResult::kOk);
-    consensus_engine = engine_factory(test::kLondonConfig);  // Noproof consensus engine
+    consensus_engine = engine_factory(ChainConfig{.seal_engine = SealEngineType::kNoProof});
     CHECK(consensus_engine->validate_seal(fake_header) == ValidationResult::kOk);
 }
 

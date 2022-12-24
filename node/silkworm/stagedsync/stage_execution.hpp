@@ -1,11 +1,11 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
 
-           http://www.apache.org/licenses/LICENSE-2.0
+       http://www.apache.org/licenses/LICENSE-2.0
 
    Unless required by applicable law or agreed to in writing, software
    distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,29 +14,28 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_STAGEDSYNC_STAGE_EXECUTION_HPP_
-#define SILKWORM_STAGEDSYNC_STAGE_EXECUTION_HPP_
+#pragma once
 
 #include <boost/circular_buffer.hpp>
 
 #include <silkworm/consensus/engine.hpp>
 #include <silkworm/execution/analysis_cache.hpp>
 #include <silkworm/execution/evm.hpp>
-#include <silkworm/stagedsync/common.hpp>
+#include <silkworm/stagedsync/stage.hpp>
 
 namespace silkworm::stagedsync {
 
-class Execution final : public IStage {
+class Execution final : public Stage {
   public:
-    explicit Execution(NodeSettings* node_settings)
-        : IStage(db::stages::kExecutionKey, node_settings),
+    explicit Execution(NodeSettings* node_settings, SyncContext* sync_context)
+        : Stage(sync_context, db::stages::kExecutionKey, node_settings),
           consensus_engine_{consensus::engine_factory(node_settings->chain_config.value())} {}
 
     ~Execution() override = default;
 
-    StageResult forward(db::RWTxn& txn) final;
-    StageResult unwind(db::RWTxn& txn, BlockNum to) final;
-    StageResult prune(db::RWTxn& txn) final;
+    Stage::Result forward(db::RWTxn& txn) final;
+    Stage::Result unwind(db::RWTxn& txn) final;
+    Stage::Result prune(db::RWTxn& txn) final;
     std::vector<std::string> get_log_progress() final;
 
   private:
@@ -55,9 +54,9 @@ class Execution final : public IStage {
 
     //! \brief Executes a batch of blocks
     //! \remarks A batch completes when either max block is reached or buffer dimensions overflow
-    StageResult execute_batch(db::RWTxn& txn, BlockNum max_block_num, BaselineAnalysisCache& analysis_cache,
-                              ObjectPool<EvmoneExecutionState>& state_pool, BlockNum prune_history_threshold,
-                              BlockNum prune_receipts_threshold);
+    Stage::Result execute_batch(db::RWTxn& txn, BlockNum max_block_num, BaselineAnalysisCache& analysis_cache,
+                                ObjectPool<EvmoneExecutionState>& state_pool, BlockNum prune_history_threshold,
+                                BlockNum prune_receipts_threshold);
 
     //! \brief For given changeset cursor/bucket it reverts the changes on states buckets
     static void unwind_state_from_changeset(mdbx::cursor& source_changeset, mdbx::cursor& plain_state_table,
@@ -76,5 +75,3 @@ class Execution final : public IStage {
 };
 
 }  // namespace silkworm::stagedsync
-
-#endif  // SILKWORM_STAGEDSYNC_STAGE_EXECUTION_HPP_

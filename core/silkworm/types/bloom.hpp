@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_TYPES_BLOOM_HPP_
-#define SILKWORM_TYPES_BLOOM_HPP_
+#pragma once
 
 #include <array>
 #include <cstddef>
@@ -39,5 +38,3 @@ inline void join(Bloom& sum, const Bloom& addend) {
 }
 
 }  // namespace silkworm
-
-#endif  // SILKWORM_TYPES_BLOOM_HPP_

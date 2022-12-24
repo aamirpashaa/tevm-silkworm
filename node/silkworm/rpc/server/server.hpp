@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_RPC_SERVER_HPP_
-#define SILKWORM_RPC_SERVER_HPP_
+#pragma once
 
 #include <memory>
 #include <vector>
@@ -68,7 +67,7 @@ class Server {
             context_pool_.add_context(builder.AddCompletionQueue(), config_.wait_mode());
         }
 
-        // gRPC async model requires the server to register one responded call for each RPC in advance.
+        // gRPC async model requires the server to register the RPC services first.
         SILK_DEBUG << "Server " << this << " registering async services";
         register_async_services(builder);
 
@@ -124,7 +123,7 @@ class Server {
     }
 
     //! Returns the number of server contexts.
-    std::size_t num_contexts() const { return context_pool_.num_contexts(); }
+    [[nodiscard]] std::size_t num_contexts() const { return context_pool_.num_contexts(); }
 
     //! Get the next server context in round-robin scheme.
     ServerContext const& next_context() { return context_pool_.next_context(); }
@@ -152,6 +151,4 @@ class Server {
     bool shutdown_{false};
 };
 
-} // namespace silkworm::rpc
-
-#endif // SILKWORM_RPC_SERVER_HPP_
+}  // namespace silkworm::rpc

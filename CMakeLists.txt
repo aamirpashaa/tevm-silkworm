@@ -1,5 +1,5 @@
 #[[
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -26,7 +26,6 @@ get_directory_property(SILKWORM_HAS_PARENT PARENT_DIRECTORY)
 if(NOT SILKWORM_HAS_PARENT)
   include(third_party/evmone/cmake/cable/bootstrap.cmake)
   include(CableBuildType)
-  include(CableBuildInfo)
   cable_set_build_type(DEFAULT Release CONFIGURATION_TYPES Release Debug)
 
   if(NOT CMAKE_TOOLCHAIN_FILE)
@@ -47,7 +46,6 @@ add the following lines before the project command of your root CMakeLists.txt:
 
 -----------------------------------------------------------------------------------------------------
 include(silkworm/third_party/evmone/cmake/cable/bootstrap.cmake)
-include(CableBuildInfo)
 include(silkworm/third_party/evmone/cmake/cable/HunterGate.cmake)
 HunterGate(
   URL "https://github.com/cpp-pm/hunter/archive/v0.24.3.tar.gz"
@@ -63,6 +61,8 @@ HunterGate(
 project(silkworm)
 set(PROJECT_VERSION 0.1.0-dev)
 
+include(CableBuildInfo)
+
 string(REGEX MATCH "([0-9]+)\\.([0-9]+)\\.([0-9]+)" _ ${PROJECT_VERSION})
 set(PROJECT_VERSION_MAJOR ${CMAKE_MATCH_1})
 set(PROJECT_VERSION_MINOR ${CMAKE_MATCH_2})
@@ -77,12 +77,17 @@ option(SILKWORM_SANITIZE "Build instrumentation for sanitizers" OFF)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/compiler_settings.cmake)
 
+# Include dependencies handled by Hunter package manager
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Hunter/core_packages.cmake)
 if(NOT SILKWORM_CORE_ONLY)
   include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Hunter/extra_packages.cmake)
 endif()
 
 if(NOT SILKWORM_CORE_ONLY)
+  # Silence CMake policy warnings in submodules
+
+  set(CMAKE_POLICY_DEFAULT_CMP0048 NEW) # project() command manages VERSION variables
+  set(CMAKE_POLICY_DEFAULT_CMP0063 NEW) # Honor visibility properties for all target types
 
   # Roaring Bitmaps
   option(ENABLE_ROARING_TESTS "" OFF)
@@ -117,8 +122,12 @@ add_library(evmone third_party/evmone/lib/evmone/advanced_analysis.cpp
                    third_party/evmone/lib/evmone/baseline_instruction_table.hpp
                    third_party/evmone/lib/evmone/baseline.cpp
                    third_party/evmone/lib/evmone/baseline.hpp
+                   third_party/evmone/lib/evmone/eof.cpp
+                   third_party/evmone/lib/evmone/eof.hpp
                    third_party/evmone/lib/evmone/execution_state.hpp
                    third_party/evmone/lib/evmone/instructions_calls.cpp
+                   third_party/evmone/lib/evmone/instructions_opcodes.hpp
+                   third_party/evmone/lib/evmone/instructions_storage.cpp
                    third_party/evmone/lib/evmone/instructions_traits.hpp
                    third_party/evmone/lib/evmone/instructions_xmacro.hpp
                    third_party/evmone/lib/evmone/instructions.hpp
@@ -127,9 +136,9 @@ add_library(evmone third_party/evmone/lib/evmone/advanced_analysis.cpp
                    third_party/evmone/lib/evmone/tracing.hpp
                    third_party/evmone/lib/evmone/vm.cpp
                    third_party/evmone/lib/evmone/vm.hpp)
-set_source_files_properties(third_party/evmone/lib/evmone/vm.cpp PROPERTIES COMPILE_DEFINITIONS PROJECT_VERSION="0.9.0-dev")
+set_source_files_properties(third_party/evmone/lib/evmone/vm.cpp PROPERTIES COMPILE_DEFINITIONS PROJECT_VERSION="0.10.0-dev")
 target_include_directories(evmone PUBLIC third_party/evmone/include third_party/evmone/lib)
-target_link_libraries(evmone PUBLIC evmc intx::intx PRIVATE evmc::instructions evmc::hex)
+target_link_libraries(evmone PUBLIC evmc intx::intx PRIVATE evmc::instructions)
 
 if(MSVC)
   target_compile_options(evmone PRIVATE /EHsc /w)
@@ -144,17 +153,61 @@ if(NOT SILKWORM_CORE_ONLY)
   target_include_directories(mdbx-static INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/libmdbx)
 endif()
 
+if(NOT MSVC)
+  set(GMP_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/gmplib")
+  set(GMP_INSTALL_DIR "${CMAKE_BINARY_DIR}/third_party/gmplib")
+
+  set(GMP_INCLUDE_DIR "${GMP_INSTALL_DIR}" CACHE PATH "")
+  set(GMP_LIBRARY "${GMP_INSTALL_DIR}/lib/libgmp.a" CACHE FILEPATH "")
+
+  include(ExternalProject)
+  ExternalProject_Add(
+    gmplib
+    SOURCE_DIR "${GMP_SOURCE_DIR}"
+    BINARY_DIR "${GMP_INSTALL_DIR}"
+    CONFIGURE_COMMAND "${GMP_SOURCE_DIR}/configure"
+      "--prefix=${GMP_INSTALL_DIR}"
+      --with-pic=yes
+    PREFIX "${GMP_INSTALL_DIR}"
+    BUILD_BYPRODUCTS "${GMP_LIBRARY}"
+  )
+endif()
+
+# libtorrent
+if(NOT SILKWORM_CORE_ONLY)
+  find_package(Boost CONFIG REQUIRED)
+  # Define Boost::headers target if missing because libtorrent needs it
+  if(NOT TARGET Boost::headers)
+    add_library(Boost::headers INTERFACE IMPORTED)
+    target_include_directories(Boost::headers INTERFACE ${Boost_INCLUDE_DIRS})
+  endif()
+  add_subdirectory(third_party/libtorrent)
+  target_compile_options(torrent-rasterbar PRIVATE -w)
+endif()
+
 add_subdirectory(third_party/silkpre)
+
+if(NOT MSVC)
+  add_dependencies(silkpre gmplib)
+  add_dependencies(ff gmplib)
+endif()
 
 # Compiler enforcements on Silkworm
 if(NOT MSVC)
-  add_compile_options(-Werror -Wall -Wextra)
+  add_compile_options(-Werror -Wall -Wextra -pedantic)
   add_compile_options(-Wshadow -Wimplicit-fallthrough -Wsign-conversion)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wold-style-cast>)
-  add_compile_options(-Wno-missing-field-initializers)
+  add_compile_options(-Wno-missing-field-initializers -Wnon-virtual-dtor)
+
   if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-Wno-attributes)
+
+    # coroutines support
+    if((CMAKE_CXX_STANDARD GREATER_EQUAL 20) AND (NOT SILKWORM_WASM_API))
+      add_compile_options(-fcoroutines)
+    endif()
   endif()
+
   if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_SYSTEM_NAME MATCHES "Darwin")
     add_compile_definitions(_LIBCPP_ENABLE_THREAD_SAFETY_ANNOTATIONS)
     add_compile_options(-Wthread-safety)

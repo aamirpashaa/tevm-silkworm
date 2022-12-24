@@ -1,5 +1,5 @@
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_SEND_MESSAGE_BY_ID_HPP
-#define SILKWORM_SEND_MESSAGE_BY_ID_HPP
+#pragma once
 
 #include <silkworm/downloader/sentry_client.hpp>
 
@@ -23,8 +22,7 @@ namespace silkworm::rpc {
 
 class SendMessageById : public rpc::UnaryCall<sentry::Sentry, sentry::SendMessageByIdRequest, sentry::SentPeers> {
   public:
-    SendMessageById(const std::string& peerId, std::unique_ptr<sentry::OutboundMessageData> message);
+    SendMessageById(const PeerId&, std::unique_ptr<sentry::OutboundMessageData> message);
 };
 
 }  // namespace silkworm::rpc
-#endif  // SILKWORM_SEND_MESSAGE_BY_ID_HPP

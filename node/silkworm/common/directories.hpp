@@ -1,5 +1,5 @@
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
 */
 
 #pragma once
-#ifndef SILKWORM_COMMON_DATA_DIR_HPP_
-#define SILKWORM_COMMON_DATA_DIR_HPP_
 
 #include <filesystem>
 
@@ -149,4 +147,3 @@ class DataDirectory final : public Directory {
 };
 
 }  // namespace silkworm
-#endif  // !SILKWORM_COMMON_DATA_DIR_HPP_

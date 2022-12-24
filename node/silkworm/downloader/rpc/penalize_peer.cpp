@@ -1,5 +1,5 @@
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -18,11 +18,11 @@
 
 namespace silkworm::rpc {
 
-PenalizePeer::PenalizePeer(const std::string& peerId, Penalty penalty)
+PenalizePeer::PenalizePeer(const PeerId& peerId, Penalty penalty)
     : UnaryCall("PenalizePeer", &sentry::Sentry::Stub::PenalizePeer, {}) {
     request_.set_allocated_peer_id(to_H512(peerId).release());
 
-    sentry::PenaltyKind raw_penalty = static_cast<sentry::PenaltyKind>(penalty);
+    auto raw_penalty = static_cast<sentry::PenaltyKind>(penalty);
     request_.set_penalty(raw_penalty);
 }
 

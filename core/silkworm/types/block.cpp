@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -195,10 +195,10 @@ namespace rlp {
         }
         uint64_t leftover{from.length() - rlp_head.payload_length};
 
-        if (err = decode_vector(from, to.transactions); err != DecodingResult::kOk) {
+        if (err = decode(from, to.transactions); err != DecodingResult::kOk) {
             return err;
         }
-        if (err = decode_vector(from, to.ommers); err != DecodingResult::kOk) {
+        if (err = decode(from, to.ommers); err != DecodingResult::kOk) {
             return err;
         }
 
@@ -219,10 +219,10 @@ namespace rlp {
         if (err = decode(from, to.header); err != DecodingResult::kOk) {
             return err;
         }
-        if (err = decode_vector(from, to.transactions); err != DecodingResult::kOk) {
+        if (err = decode(from, to.transactions); err != DecodingResult::kOk) {
             return err;
         }
-        if (err = decode_vector(from, to.ommers); err != DecodingResult::kOk) {
+        if (err = decode(from, to.ommers); err != DecodingResult::kOk) {
             return err;
         }
 

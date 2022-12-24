@@ -22,13 +22,15 @@
 
 #include <catch2/catch.hpp>
 
+#include <silkworm/test/log.hpp>
+
 namespace silkworm::log {
 
 // Custom LogBuffer just for testing to access buffered content
 template <Level level>
 class TestLogBuffer : public LogBuffer<level> {
   public:
-    std::string content() const { return LogBuffer<level>::ss_.str(); }
+    [[nodiscard]] std::string content() const { return LogBuffer<level>::ss_.str(); }
 };
 
 // Utility test function enforcing that log buffered content *IS* empty
@@ -58,21 +60,10 @@ class StreamSwap {
     std::ostream& stream_;
 };
 
-// Factory function creating one null output stream (all characters are discarded)
-std::ostream& null_stream() {
-    static struct null_buf : public std::streambuf {
-        int overflow(int c) override { return c; }
-    } null_buf;
-    static struct null_strm : public std::ostream {
-        null_strm() : std::ostream(&null_buf) {}
-    } null_strm;
-    return null_strm;
-}
-
 TEST_CASE("LogBuffer", "[silkworm][common][log]") {
     // Temporarily override std::cout and std::cerr with null stream to avoid terminal output
-    StreamSwap cout_swap{std::cout, null_stream()};
-    StreamSwap cerr_swap{std::cerr, null_stream()};
+    StreamSwap cout_swap{std::cout, test::null_stream()};
+    StreamSwap cerr_swap{std::cerr, test::null_stream()};
 
     SECTION("LogBuffer stores nothing for verbosity higher than default") {
         check_log_empty<Level::kDebug>();
@@ -88,14 +79,14 @@ TEST_CASE("LogBuffer", "[silkworm][common][log]") {
     }
 
     SECTION("LogBuffer stores nothing for verbosity higher than configured one") {
-        set_verbosity(Level::kWarning);
+        test::SetLogVerbosityGuard guard{Level::kWarning};
         check_log_empty<Level::kInfo>();
         check_log_empty<Level::kDebug>();
         check_log_empty<Level::kTrace>();
     }
 
     SECTION("LogBuffer stores content for verbosity lower than or equal to configured one") {
-        set_verbosity(Level::kWarning);
+        test::SetLogVerbosityGuard guard{Level::kWarning};
         check_log_not_empty<Level::kWarning>();
         check_log_not_empty<Level::kError>();
         check_log_not_empty<Level::kCritical>();

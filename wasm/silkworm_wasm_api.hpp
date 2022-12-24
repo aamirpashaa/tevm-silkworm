@@ -1,5 +1,5 @@
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_WASM_API_HPP_
-#define SILKWORM_WASM_API_HPP_
+#pragma once
 
 // Preliminary Silkworm API for WebAssembly.
 // Currently it's unstable and is likely to change.
@@ -70,7 +69,7 @@ SILKWORM_EXPORT void difficulty(intx::uint256* in_out, uint64_t block_number, ui
 SILKWORM_EXPORT silkworm::Transaction* new_transaction(const silkworm::Bytes* rlp);
 SILKWORM_EXPORT void delete_transaction(silkworm::Transaction* x);
 
-SILKWORM_EXPORT bool check_intrinsic_gas(const silkworm::Transaction* txn, bool homestead, bool istanbul);
+SILKWORM_EXPORT bool check_intrinsic_gas(const silkworm::Transaction* txn, evmc_revision rev);
 
 SILKWORM_EXPORT const uint8_t* recover_sender(silkworm::Transaction* txn);
 
@@ -136,5 +135,3 @@ SILKWORM_EXPORT void delete_blockchain(silkworm::consensus::Blockchain* x);
 SILKWORM_EXPORT silkworm::ValidationResult blockchain_insert_block(silkworm::consensus::Blockchain* chain,
                                                                    silkworm::Block* block, bool check_state_root);
 }
-
-#endif  // SILKWORM_WASM_API_HPP_

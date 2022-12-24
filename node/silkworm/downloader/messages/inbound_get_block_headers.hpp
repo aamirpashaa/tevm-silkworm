@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_INBOUND_GET_BLOCK_HEADERS_HPP
-#define SILKWORM_INBOUND_GET_BLOCK_HEADERS_HPP
+#pragma once
 
 #include <silkworm/downloader/packets/get_block_headers_packet.hpp>
 
@@ -31,12 +30,11 @@ class InboundGetBlockHeaders : public InboundMessage {
     std::string content() const override;
     uint64_t reqId() const override;
 
-    void execute(Db::ReadOnlyAccess, HeaderChain&, BodySequence&, SentryClient&) override;
+    void execute(db::ROAccess, HeaderChain&, BodySequence&, SentryClient&) override;
 
   private:
-    std::string peerId_;
+    PeerId peerId_;
     GetBlockHeadersPacket66 packet_;
 };
 
 }  // namespace silkworm
-#endif  // SILKWORM_INBOUND_GET_BLOCK_HEADERS_HPP

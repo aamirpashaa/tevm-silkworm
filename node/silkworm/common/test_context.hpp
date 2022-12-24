@@ -1,11 +1,11 @@
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
 
-           http://www.apache.org/licenses/LICENSE-2.0
+       http://www.apache.org/licenses/LICENSE-2.0
 
    Unless required by applicable law or agreed to in writing, software
    distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,10 +14,10 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_COMMON_TEST_CONTEXT_HPP_
-#define SILKWORM_COMMON_TEST_CONTEXT_HPP_
+#pragma once
 
 #include <silkworm/common/directories.hpp>
+#include <silkworm/common/settings.hpp>
 #include <silkworm/db/mdbx.hpp>
 
 namespace silkworm::test {
@@ -27,21 +27,21 @@ namespace silkworm::test {
 //! \remarks Context follows the RAII idiom and cleans up its temporary directory upon destruction.
 class Context {
   public:
-    explicit Context(bool with_create_tables = true);
+    explicit Context(bool with_create_tables = true, bool inmemory = true);
 
     // Not copyable nor movable
     Context(const Context&) = delete;
     Context& operator=(const Context&) = delete;
 
-    [[nodiscard]] const DataDirectory& dir() const { return data_dir_; }
+    [[nodiscard]] silkworm::NodeSettings& node_settings() { return node_settings_; }
+
+    [[nodiscard]] const DataDirectory& dir() const { return *(node_settings_.data_directory); }
 
     [[nodiscard]] mdbx::txn& txn() { return txn_; }
 
     [[nodiscard]] mdbx::env& env() { return env_; }
 
-    void commit_txn() {
-        txn_.commit();
-    }
+    void commit_txn() { txn_.commit(); }
 
     void commit_and_renew_txn() {
         txn_.commit();
@@ -49,12 +49,10 @@ class Context {
     }
 
   private:
-    TemporaryDirectory tmp_dir_;
-    DataDirectory data_dir_;
+    TemporaryDirectory tmp_dir_{};
+    silkworm::NodeSettings node_settings_;
     mdbx::env_managed env_;
     mdbx::txn_managed txn_;
 };
 
 }  // namespace silkworm::test
-
-#endif  // SILKWORM_COMMON_TEST_CONTEXT_HPP_

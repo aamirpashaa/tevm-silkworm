@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_DB_UTIL_HPP_
-#define SILKWORM_DB_UTIL_HPP_
+#pragma once
 
 /*
 Part of the compatibility layer with the Erigon DB format;
@@ -27,6 +26,7 @@ see its package dbutils.
 #include <string>
 
 #include <absl/container/btree_map.h>
+#include <absl/strings/str_cat.h>
 
 #include <silkworm/common/base.hpp>
 #include <silkworm/db/mdbx.hpp>
@@ -42,12 +42,7 @@ struct VersionBase {
     uint32_t Minor{0};
     uint32_t Patch{0};
 
-    [[nodiscard]] std::string to_string() const {
-        std::string ret{std::to_string(Major)};
-        ret.append("." + std::to_string(Minor));
-        ret.append("." + std::to_string(Patch));
-        return ret;
-    }
+    [[nodiscard]] std::string to_string() const { return absl::StrCat(Major, ".", Minor, ".", Patch); }
 
     friend auto operator<=>(const VersionBase&, const VersionBase&) = default;
 };
@@ -125,9 +120,9 @@ namespace detail {
         [[nodiscard]] Bytes encode() const;
     };
 
+    DecodingResult decode_stored_block_body(ByteView& from, BlockBodyForStorage& to);
+
     BlockBodyForStorage decode_stored_block_body(ByteView& from);
 
 }  // namespace detail
 }  // namespace silkworm::db
-
-#endif  // SILKWORM_DB_UTIL_HPP_

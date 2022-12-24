@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_BLOCK_HEADERS_PACKET_HPP
-#define SILKWORM_BLOCK_HEADERS_PACKET_HPP
+#pragma once
 
 #include <algorithm>
 
@@ -31,9 +30,6 @@ struct BlockHeadersPacket66 {  // eth/66 version
 };
 
 namespace rlp {
-
-    template <>
-    DecodingResult decode(ByteView& from, BlockHeadersPacket& to) noexcept;
 
     size_t length(const BlockHeadersPacket66& from) noexcept;
 
@@ -58,5 +54,3 @@ inline std::ostream& operator<<(std::ostream& os, const BlockHeadersPacket66& pa
 }
 
 }  // namespace silkworm
-
-#endif  // SILKWORM_BLOCK_HEADERS_PACKET_HPP

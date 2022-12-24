@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,9 +14,9 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_COMMON_UTIL_HPP_
-#define SILKWORM_COMMON_UTIL_HPP_
+#pragma once
 
+#include <cmath>
 #include <cstring>
 #include <optional>
 #include <string_view>
@@ -41,6 +41,10 @@ evmc::bytes32 to_bytes32(ByteView bytes);
 //! \param [in] data : The view to process
 //! \return A new view of the sequence
 ByteView zeroless_view(ByteView data);
+
+inline bool has_hex_prefix(std::string_view s) {
+    return s.length() >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X');
+}
 
 //! \brief Returns a string representing the hex form of provided string of bytes
 std::string to_hex(ByteView bytes, bool with_prefix = false);
@@ -72,16 +76,63 @@ std::optional<uint64_t> parse_size(const std::string& sizestr);
 std::string human_size(uint64_t bytes);
 
 // Compares two strings for equality with case insensitivity
-bool iequals(const std::string& a, const std::string& b);
+bool iequals(std::string_view a, std::string_view b);
 
 // The length of the longest common prefix of a and b.
 size_t prefix_length(ByteView a, ByteView b);
 
 inline ethash::hash256 keccak256(ByteView view) { return ethash::keccak256(view.data(), view.size()); }
 
-// Splits a string by delimiter and returns a vector of tokens
-std::vector<std::string> split(std::string_view source, std::string_view delimiter);
+//! \brief Create an intx::uint256 from a string supporting both fixed decimal and scientific notation
+template <typename Int>
+inline constexpr Int from_string_sci(const char* str) {
+    auto s = str;
+    auto m = Int{};
+
+    int num_digits = 0;
+    int num_decimal_digits = 0;
+    bool count_decimals{false};
+    char c;
+    while ((c = *s++)) {
+        if (c == '.') {
+            count_decimals = true;
+            continue;
+        }
+        if (c == 'e') {
+            if (*s++ != '+') intx::throw_<std::out_of_range>(s);
+            break;
+        }
+        if (num_digits++ > std::numeric_limits<Int>::digits10)
+            intx::throw_<std::out_of_range>(s);
+        if (count_decimals) num_decimal_digits++;
+
+        const auto d = intx::from_dec_digit(c);
+        m = m * Int{10} + d;
+        if (m < d)
+            intx::throw_<std::out_of_range>(s);
+    }
+    if (!c) {
+        if (num_decimal_digits == 0) return m;
+        intx::throw_<std::out_of_range>(s);
+    }
+
+    int e = 0;
+    while ((c = *s++)) {
+        const auto d = intx::from_dec_digit(c);
+        e = e * 10 + d;
+        if (e < d)
+            intx::throw_<std::out_of_range>(s);
+    }
+    if (e < num_decimal_digits)
+        intx::throw_<std::out_of_range>(s);
+
+    auto x = m;
+    auto exp = e - num_decimal_digits;
+    while (exp > 0) {
+        x = x * Int{10};
+        --exp;
+    }
+    return x;
+}
 
 }  // namespace silkworm
-
-#endif  // SILKWORM_COMMON_UTIL_HPP_

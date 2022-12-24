@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -16,11 +16,12 @@
 
 #include "header_chain.hpp"
 
-#include <silkworm/chain/identity.hpp>
 #include <silkworm/common/as_range.hpp>
 #include <silkworm/common/log.hpp>
+#include <silkworm/stagedsync/stage.hpp>
 
 #include "algorithm.hpp"
+#include "db_utils.hpp"
 #include "random_number.hpp"
 
 namespace silkworm {
@@ -32,7 +33,7 @@ class segment_cut_and_paste_error : public std::logic_error {
     explicit segment_cut_and_paste_error(const std::string& reason) : std::logic_error(reason) {}
 };
 
-HeaderChain::HeaderChain(const ChainIdentity& ci) : HeaderChain(consensus::engine_factory(ci.chain)) {}
+HeaderChain::HeaderChain(const ChainConfig& chain_config) : HeaderChain(consensus::engine_factory(chain_config)) {}
 
 HeaderChain::HeaderChain(ConsensusEnginePtr consensus_engine)
     : highest_in_db_(0),
@@ -44,6 +45,14 @@ HeaderChain::HeaderChain(ConsensusEnginePtr consensus_engine)
     if (!consensus_engine_) {
         throw std::logic_error("HeaderChain exception, cause: unknown consensus engine");
         // or must the downloader go on and return StageResult::kUnknownConsensusEngine?
+    }
+
+    // User can specify to stop downloading process at some block
+    const auto stop_at_block = stop_at_block_from_env();
+    if (stop_at_block.has_value()) {
+        target_block_ = stop_at_block;
+        top_seen_height_ = target_block_.value() + 2 * stride;  // needed if no header announcements on p2p network
+        SILK_TRACE << "HeaderChain target block=" << target_block_.value();
     }
 
     RandomNumber random(100'000'000, 1'000'000'000);
@@ -69,7 +78,8 @@ std::pair<BlockNum, BlockNum> HeaderChain::anchor_height_range() const {
 }
 
 bool HeaderChain::in_sync() const {
-    return highest_in_db_ >= preverified_hashes_->height && top_seen_height_ > 0 && highest_in_db_ >= top_seen_height_;
+    BlockNum tip_block = target_block_ ? target_block_.value() : std::max(preverified_hashes_->height, top_seen_height_);
+    return top_seen_height_ > 0 && highest_in_db_ >= tip_block;
 }
 
 size_t HeaderChain::pending_links() const { return links_.size() - persisted_link_queue_.size(); }
@@ -82,10 +92,10 @@ void HeaderChain::add_bad_headers(const std::set<Hash>& bads) {
     bad_headers_.insert(bads.begin(), bads.end());  // todo: use set_union or merge?
 }
 
-void HeaderChain::recover_initial_state(Db::ReadOnlyAccess::Tx& tx) {
+void HeaderChain::recover_initial_state(db::ROTxn& tx) {
     reduce_persisted_links_to(0);  // drain persistedLinksQueue and remove links
 
-    tx.read_headers_in_reverse_order(persistent_link_limit, [this](BlockHeader&& header) {
+    read_headers_in_reverse_order(tx, persistent_link_limit, [this](BlockHeader&& header) {
         this->add_header_as_link(header, true);  // todo: optimize add_header_as_link to use Header&&
     });
 
@@ -162,6 +172,7 @@ Headers HeaderChain::withdraw_stable_headers() {
         // and cause insertion of headers in ascending order of height
         if (!link->next.empty()) {
             assessing_list.push_all(link->next);
+            link->next.clear();
         }
 
         // Make sure long insertions do not appear as a stuck stage headers
@@ -363,8 +374,8 @@ auto HeaderChain::request_more_headers(time_point_t time_point, seconds_t timeou
             return {std::move(packet), std::move(penalties)};  // try (again) to extend this anchor
         } else {
             // ancestors of this anchor seem to be unavailable, invalidate and move on
-            log::Warning() << "HeaderChain: invalidating anchor for suspected unavailability, "
-                           << "height=" << anchor->blockHeight;
+            log::Warning("HeaderChain") << "invalidating anchor for suspected unavailability, "
+                                        << "height=" << anchor->blockHeight;
             // no need to do anchor_queue_.pop(), implicitly done in the following
             invalidate(anchor);
             penalties.emplace_back(Penalty::AbandonedAnchorPenalty, anchor->peerId);
@@ -425,16 +436,16 @@ bool HeaderChain::has_link(Hash hash) { return (links_.find(hash) != links_.end(
 auto HeaderChain::find_bad_header(const std::vector<BlockHeader>& headers) -> bool {
     for (auto& header : headers) {
         if (is_zero(header.parent_hash) && header.number != 0) {
-            log::Warning() << "HeaderChain: received malformed header: " << header.number;
+            log::Warning("HeaderStage") << "received malformed header: " << header.number;
             return true;
         }
         if (header.difficulty == 0) {
-            log::Warning() << "HeaderChain: received header w/ wrong diff: " << header.number;
+            log::Warning("HeaderStage") << "received header w/ zero difficulty, block num=" << header.number;
             return true;
         }
         Hash header_hash = header.hash();
         if (bad_headers_.contains(header_hash)) {
-            log::Warning() << "HeaderChain: received bad header: " << header.number;
+            log::Warning("HeaderStage") << "received bad header: " << header.number;
             return true;
         }
     }
@@ -628,9 +639,9 @@ void HeaderChain::reduce_links_to(size_t limit) {
 
     invalidate(victim_anchor);
 
-    log::Info() << "LinkQueue: too many links, cut down from " << initial_size << " to " << pending_links()
-                << " (removed chain bundle start=" << victim_anchor->blockHeight
-                << " end=" << victim_anchor->lastLinkHeight << ")";
+    log::Info("HeaderStage") << "LinkQueue has too many links, cut down from " << initial_size << " to " << pending_links()
+                             << " (removed chain bundle start=" << victim_anchor->blockHeight
+                             << " end=" << victim_anchor->lastLinkHeight << ")";
 }
 
 // find_anchors tries to find the highest link the in the new segment that can be attached to an existing anchor
@@ -908,7 +919,7 @@ void HeaderChain::remove(std::shared_ptr<Anchor> anchor) {
     bool erased2 = anchor_queue_.erase(anchor);
 
     if (erased1 == 0 || !erased2) {
-        log::Warning() << "HeaderChain: removal of anchor failed, bn=" << anchor->blockHeight;
+        log::Warning("HeaderStage") << "removal of anchor failed, bn=" << anchor->blockHeight;
     }
 }
 
@@ -967,5 +978,14 @@ std::string HeaderChain::dump_chain_bundles() const {
     return output;
 }
 */
+
+std::optional<BlockNum> stop_at_block_from_env() {
+    std::optional<BlockNum> target_block;
+    // User can specify to stop downloading process at some block
+    if (const char* stop_at_block{std::getenv("STOP_AT_BLOCK")}; stop_at_block != nullptr) {
+        target_block = std::stoul(stop_at_block);
+    }
+    return target_block;
+}
 
 }  // namespace silkworm

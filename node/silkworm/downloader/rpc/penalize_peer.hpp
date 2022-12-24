@@ -1,5 +1,5 @@
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_PENALIZE_PEER_HPP
-#define SILKWORM_PENALIZE_PEER_HPP
+#pragma once
 
 #include <silkworm/downloader/sentry_client.hpp>
 
@@ -23,9 +22,7 @@ namespace silkworm::rpc {
 
 class PenalizePeer : public rpc::UnaryCall<sentry::Sentry, sentry::PenalizePeerRequest, google::protobuf::Empty> {
   public:
-    PenalizePeer(const std::string& peerId, Penalty penalty);
+    PenalizePeer(const PeerId&, Penalty);
 };
 
 }  // namespace silkworm::rpc
-
-#endif  // SILKWORM_PENALIZE_PEER_HPP

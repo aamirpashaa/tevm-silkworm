@@ -1,5 +1,5 @@
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -35,9 +35,9 @@ void EthashEngine::finalize(IntraBlockState& state, const Block& block, const ev
     const uint64_t block_number{block.header.number};
     intx::uint256 miner_reward{block_reward};
     for (const BlockHeader& ommer : block.ommers) {
-        intx::uint256 ommer_reward{((8 + ommer.number - block_number) * block_reward) >> 3};
+        const intx::uint256 ommer_reward{((8 + ommer.number - block_number) * block_reward) >> 3};
         state.add_to_balance(ommer.beneficiary, ommer_reward);
-        miner_reward += block_reward / 32;
+        miner_reward += block_reward >> 5;  // div 32
     }
 
     // state.add_to_balance(block.header.beneficiary, miner_reward);
@@ -47,7 +47,7 @@ void EthashEngine::finalize(IntraBlockState& state, const Block& block, const ev
 ValidationResult EthashEngine::validate_seal(const BlockHeader& header) {
     const int epoch_number{static_cast<int>(header.number / ethash::epoch_length)};
     if (!epoch_context_ || epoch_context_->epoch_number != epoch_number) {
-        epoch_context_.reset(); // Firstly release the obsoleted context
+        epoch_context_.reset();  // Firstly release the obsoleted context
         epoch_context_ = ethash::create_epoch_context(epoch_number);
     }
 

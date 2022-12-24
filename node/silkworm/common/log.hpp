@@ -1,11 +1,11 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
 
-           http://www.apache.org/licenses/LICENSE-2.0
+       http://www.apache.org/licenses/LICENSE-2.0
 
    Unless required by applicable law or agreed to in writing, software
    distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_COMMON_LOG_HPP_
-#define SILKWORM_COMMON_LOG_HPP_
+#pragma once
 
 #include <filesystem>
 #include <sstream>
@@ -44,12 +43,16 @@ struct Settings {
     bool log_threads{false};            // Whether to print thread ids in log lines
     Level log_verbosity{Level::kInfo};  // Log verbosity level
     std::string log_file;               // Log to file
-    char log_thousands_sep{0};          // Thousands separator
+    char log_thousands_sep{'\''};       // Thousands separator
 };
 
 //! \brief Initializes logging facilities
 //! \note This function is not thread safe as it's meant to be used at start of process and never called again
 void init(Settings& settings);
+
+//! \brief Get the current logging verbosity
+//! \note This function is not thread safe as it's meant to be used in tests
+Level get_verbosity();
 
 //! \brief Sets logging verbosity
 //! \note This function is not thread safe as it's meant to be used at start of process and never called again
@@ -123,5 +126,3 @@ using Message = LogBuffer<Level::kNone>;
 #define SILK_ERROR SILK_LOGBUFFER(silkworm::log::Level::kError)
 #define SILK_CRIT SILK_LOGBUFFER(silkworm::log::Level::kCritical)
 #define SILK_LOG SILK_LOGBUFFER(silkworm::log::Level::kNone)
-
-#endif  // !SILKWORM_COMMON_LOG_HPP_

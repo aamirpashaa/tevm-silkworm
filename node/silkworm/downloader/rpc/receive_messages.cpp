@@ -1,5 +1,5 @@
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -20,14 +20,14 @@ namespace silkworm::rpc {
 
 ReceiveMessages::ReceiveMessages(int scope)
     : OutStreamingCall("ReceiveMessages", &sentry::Sentry::Stub::Messages, {}) {
-    if (scope & SentryClient::Scope::BlockAnnouncements) {  // previously received with RecvMessages
+    if (scope & Scope::BlockAnnouncements) {  // previously received with RecvMessages
         request_.add_ids(sentry::MessageId::BLOCK_HEADERS_66);
         request_.add_ids(sentry::MessageId::BLOCK_BODIES_66);
         request_.add_ids(sentry::MessageId::NEW_BLOCK_HASHES_66);
         request_.add_ids(sentry::MessageId::NEW_BLOCK_66);
     }
 
-    if (scope & SentryClient::Scope::BlockRequests) {  // previously received with RecvUploadMessages
+    if (scope & Scope::BlockRequests) {  // previously received with RecvUploadMessages
         request_.add_ids(sentry::MessageId::GET_BLOCK_HEADERS_66);
         request_.add_ids(sentry::MessageId::GET_BLOCK_BODIES_66);
     }

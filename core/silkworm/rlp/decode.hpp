@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -17,8 +17,7 @@
 // RLP decoding functions as per
 // https://eth.wiki/en/fundamentals/rlp
 
-#ifndef SILKWORM_RLP_DECODE_HPP_
-#define SILKWORM_RLP_DECODE_HPP_
+#pragma once
 
 #include <array>
 #include <cstring>
@@ -47,14 +46,25 @@ DecodingResult decode(ByteView& from, evmc::bytes32& to) noexcept;
 template <>
 DecodingResult decode(ByteView& from, Bytes& to) noexcept;
 
+template <UnsignedIntegral T>
+DecodingResult decode(ByteView& from, T& to) noexcept {
+    auto [h, err]{decode_header(from)};
+    if (err != DecodingResult::kOk) {
+        return err;
+    }
+    if (h.list) {
+        return DecodingResult::kUnexpectedList;
+    }
+    err = endian::from_big_compact(from.substr(0, h.payload_length), to);
+    if (err != DecodingResult::kOk) {
+        return err;
+    }
+    from.remove_prefix(h.payload_length);
+    return DecodingResult::kOk;
+}
+
 template <>
 DecodingResult decode(ByteView& from, bool& to) noexcept;
-
-template <>
-DecodingResult decode(ByteView& from, uint64_t& to) noexcept;
-
-template <>
-DecodingResult decode(ByteView& from, intx::uint256& to) noexcept;
 
 template <size_t N>
 DecodingResult decode(ByteView& from, std::span<uint8_t, N> to) noexcept {
@@ -87,7 +97,7 @@ DecodingResult decode(ByteView& from, std::array<uint8_t, N>& to) noexcept {
 }
 
 template <class T>
-DecodingResult decode_vector(ByteView& from, std::vector<T>& to) noexcept {
+DecodingResult decode(ByteView& from, std::vector<T>& to) noexcept {
     auto [h, err]{decode_header(from)};
     if (err != DecodingResult::kOk) {
         return err;
@@ -110,6 +120,32 @@ DecodingResult decode_vector(ByteView& from, std::vector<T>& to) noexcept {
     return DecodingResult::kOk;
 }
 
-}  // namespace silkworm::rlp
+template <typename Arg1, typename Arg2>
+DecodingResult decode_items(ByteView& from, Arg1& arg1, Arg2& arg2) noexcept {
+    DecodingResult err = decode(from, arg1);
+    if (err != DecodingResult::kOk)
+        return err;
+    return decode(from, arg2);
+}
 
-#endif  // SILKWORM_RLP_DECODE_HPP_
+template <typename Arg1, typename Arg2, typename... Args>
+DecodingResult decode_items(ByteView& from, Arg1& arg1, Arg2& arg2, Args&... args) noexcept {
+    DecodingResult err = decode(from, arg1);
+    if (err != DecodingResult::kOk)
+        return err;
+    return decode_items(from, arg2, args...);
+}
+
+template <typename Arg1, typename Arg2, typename... Args>
+DecodingResult decode(ByteView& from, Arg1& arg1, Arg2& arg2, Args&... args) noexcept {
+    auto [header, err] = decode_header(from);
+    if (err != DecodingResult::kOk) {
+        return err;
+    }
+    if (!header.list) {
+        return DecodingResult::kUnexpectedString;
+    }
+    return decode_items(from, arg1, arg2, args...);
+}
+
+}  // namespace silkworm::rlp

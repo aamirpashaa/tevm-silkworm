@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -64,16 +64,15 @@ static const std::vector<fs::path> kFailingTests{
     // Geth excludes this test as well:
     // https://github.com/ethereum/go-ethereum/blob/v1.10.18/tests/transaction_test.go#L31
     kTransactionDir / "ttGasLimit" / "TransactionWithGasLimitxPriceOverflow.json",
+
+    // EOF is not implemented yet
+    kBlockchainDir / "GeneralStateTests" / "stEIP3540",
 };
 
 static constexpr size_t kColumnWidth{80};
 
 static const std::map<std::string, ChainConfig> kNetworkConfig{
-    {"Frontier",
-     {
-         .chain_id = 1,
-         .seal_engine = SealEngineType::kNoProof,
-     }},
+    {"Frontier", test::kFrontierConfig},
     {"Homestead",
      {
          .chain_id = 1,
@@ -191,11 +190,34 @@ static const std::map<std::string, ChainConfig> kNetworkConfig{
                  0,  // Istanbul
                  0,  // Berlin
                  0,  // London
-                 0,  // FORK_NEXT_VALUE (EIP-3675)
+                 0,  // Merge Netsplit (FORK_NEXT_VALUE)
              },
          .muir_glacier_block = 0,
          .arrow_glacier_block = 0,
+         .gray_glacier_block = 0,
          .terminal_total_difficulty = 0,
+     }},
+    {"Merge+3855", test::kShanghaiConfig},
+    {"Merge+3860", test::kShanghaiConfig},
+    {"ArrowGlacierToMergeAtDiffC0000",
+     {
+         .chain_id = 1,
+         .seal_engine = SealEngineType::kNoProof,
+         .evmc_fork_blocks =
+             {
+                 0,  // Homestead
+                 0,  // Tangerine Whistle
+                 0,  // Spurious Dragon
+                 0,  // Byzantium
+                 0,  // Constantinople
+                 0,  // Petersburg
+                 0,  // Istanbul
+                 0,  // Berlin
+                 0,  // London
+             },
+         .muir_glacier_block = 0,
+         .arrow_glacier_block = 0,
+         .terminal_total_difficulty = 0xC0000,
      }},
     {"FrontierToHomesteadAt5",
      {
@@ -304,6 +326,26 @@ static const std::map<std::string, ChainConfig> kNetworkConfig{
          .muir_glacier_block = 0,
          .arrow_glacier_block = 0,
      }},
+    {"GrayGlacier",
+     {
+         .chain_id = 1,
+         .seal_engine = SealEngineType::kNoProof,
+         .evmc_fork_blocks =
+             {
+                 0,  // Homestead
+                 0,  // Tangerine Whistle
+                 0,  // Spurious Dragon
+                 0,  // Byzantium
+                 0,  // Constantinople
+                 0,  // Petersburg
+                 0,  // Istanbul
+                 0,  // Berlin
+                 0,  // London
+             },
+         .muir_glacier_block = 0,
+         .arrow_glacier_block = 0,
+         .gray_glacier_block = 0,
+     }},
 };
 
 ObjectPool<EvmoneExecutionState> execution_state_pool{/*thread_safe=*/true};
@@ -338,7 +380,11 @@ void init_pre_state(const nlohmann::json& pre, State& state) {
     }
 }
 
-enum class Status { kPassed, kFailed, kSkipped };
+enum class Status {
+    kPassed,
+    kFailed,
+    kSkipped
+};
 
 Status run_block(const nlohmann::json& json_block, Blockchain& blockchain) {
     bool invalid{json_block.contains("expectException")};
@@ -478,9 +524,13 @@ RunResults blockchain_test(const nlohmann::json& json_test) {
     Block genesis_block;
     rlp::success_or_throw(rlp::decode(genesis_view, genesis_block));
 
-    InMemoryState state;
     std::string network{json_test["network"].get<std::string>()};
-    const ChainConfig& config{kNetworkConfig.at(network)};
+    const auto config_it{kNetworkConfig.find(network)};
+    if (config_it == kNetworkConfig.end()) {
+        std::cout << "unknown network " << network << std::endl;
+        return Status::kFailed;
+    }
+    const ChainConfig& config{config_it->second};
 
     auto consensus_engine{consensus::engine_factory(config)};
     if (!consensus_engine) {
@@ -489,6 +539,7 @@ RunResults blockchain_test(const nlohmann::json& json_test) {
         return Status::kSkipped;
     }
 
+    InMemoryState state;
     init_pre_state(json_test["pre"], state);
 
     Blockchain blockchain{state, consensus_engine, config, genesis_block};
@@ -506,7 +557,8 @@ RunResults blockchain_test(const nlohmann::json& json_test) {
         evmc::bytes32 state_root{state.state_root_hash()};
         std::string expected_hex{json_test["postStateHash"].get<std::string>()};
         if (state_root != to_bytes32(from_hex(expected_hex).value())) {
-            std::cout << "postStateHash mismatch:\n" << to_hex(state_root) << " != " << expected_hex << std::endl;
+            std::cout << "postStateHash mismatch:\n"
+                      << to_hex(state_root) << " != " << expected_hex << std::endl;
             return Status::kFailed;
         } else {
             return Status::kPassed;
@@ -651,7 +703,7 @@ RunResults transaction_test(const nlohmann::json& j) {
 
         const auto expected_intrinsic_gas{intx::from_string<intx::uint256>(test["intrinsicGas"].get<std::string>())};
         const evmc_revision rev{config.revision(/*block_number=*/0)};
-        const auto calculated_intrinsic_gas{intrinsic_gas(txn, rev >= EVMC_HOMESTEAD, rev >= EVMC_ISTANBUL)};
+        const auto calculated_intrinsic_gas{intrinsic_gas(txn, rev)};
         if (calculated_intrinsic_gas != expected_intrinsic_gas) {
             std::cout << "Intrinsic gas mismatch for " << entry.key() << ":\n"
                       << intx::to_string(calculated_intrinsic_gas, /*base=*/16)

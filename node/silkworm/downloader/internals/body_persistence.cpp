@@ -1,29 +1,30 @@
 /*
-Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+       http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
 */
 
 #include "body_persistence.hpp"
 
+#include <silkworm/db/stages.hpp>
+
 namespace silkworm {
 
-BodyPersistence::BodyPersistence(Db::ReadWriteAccess::Tx& tx, const ChainIdentity& ci)
+BodyPersistence::BodyPersistence(db::RWTxn& tx, const ChainConfig& chain_config)
     : tx_{tx},
-      consensus_engine_{consensus::engine_factory(ci.chain)},
-      chain_state_{tx.raw(), /*prune_from=*/0, /*historical_block=null*/} {
-
-    auto bodies_stage_height = tx.read_stage_progress(db::stages::kBlockBodiesKey);
+      consensus_engine_{consensus::engine_factory(chain_config)},
+      chain_state_{tx, /*prune_from=*/0, /*historical_block=null*/} {
+    auto bodies_stage_height = db::stages::read_stage_progress(tx, db::stages::kBlockBodiesKey);
 
     initial_height_ = bodies_stage_height;
     highest_height_ = bodies_stage_height;
@@ -37,7 +38,7 @@ Hash BodyPersistence::bad_block() const { return bad_block_; }
 void BodyPersistence::set_preverified_height(BlockNum height) { preverified_height_ = height; }
 
 void BodyPersistence::persist(const Block& block) {
-    Hash block_hash = block.header.hash(); // save cpu
+    Hash block_hash = block.header.hash();  // save cpu
     BlockNum block_num = block.header.number;
 
     auto validation_result = ValidationResult::kOk;
@@ -56,17 +57,18 @@ void BodyPersistence::persist(const Block& block) {
         return;
     }
 
-    if (!tx_.has_body(block_hash, block_num))
-        tx_.write_body(block, block_hash, block_num);
+    if (!db::has_body(tx_, block_num, block_hash)) {
+        db::write_body(tx_, block, block_hash, block_num);
+    }
 
     if (block_num > highest_height_) {
         highest_height_ = block_num;
-        tx_.write_stage_progress(db::stages::kBlockBodiesKey, block_num);
+        db::stages::write_stage_progress(tx_, db::stages::kBlockBodiesKey, block_num);
     }
 }
 
 void BodyPersistence::persist(const std::vector<Block>& blocks) {
-    for(auto& block: blocks) {
+    for (auto& block : blocks) {
         persist(block);
     }
 }
@@ -75,9 +77,9 @@ void BodyPersistence::close() {
     // does nothing
 }
 
-void BodyPersistence::remove_bodies(BlockNum new_height, Hash, Db::ReadWriteAccess::Tx& tx) {
+void BodyPersistence::remove_bodies(BlockNum new_height, std::optional<Hash>, db::RWTxn& tx) {
     // like Erigon, we do not erase "wrong" blocks, only update stage progress...
-    tx.write_stage_progress(db::stages::kBlockBodiesKey, new_height);
+    db::stages::write_stage_progress(tx, db::stages::kBlockBodiesKey, new_height);
 }
 
-}
+}  // namespace silkworm

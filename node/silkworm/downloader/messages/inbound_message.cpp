@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -20,8 +20,8 @@
 
 #include <silkworm/common/log.hpp>
 
-#include "inbound_block_headers.hpp"
 #include "inbound_block_bodies.hpp"
+#include "inbound_block_headers.hpp"
 #include "inbound_get_block_bodies.hpp"
 #include "inbound_get_block_headers.hpp"
 #include "inbound_new_block.hpp"
@@ -44,8 +44,8 @@ std::shared_ptr<InboundMessage> InboundMessage::make(const sentry::InboundMessag
     else if (raw_message.id() == sentry::MessageId::BLOCK_BODIES_66)
         message = std::make_shared<InboundBlockBodies>(raw_message);
     else
-        log::Warning() << "InboundMessage " << sentry::MessageId_Name(raw_message.id())
-                       << " received but ignored";
+        log::Warning("HeaderStage") << "InboundMessage " << sentry::MessageId_Name(raw_message.id())
+                                    << " received but ignored";
     return message;
 }
 

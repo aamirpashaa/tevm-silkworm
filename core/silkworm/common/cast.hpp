@@ -1,5 +1,5 @@
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_COMMON_CAST_HPP_
-#define SILKWORM_COMMON_CAST_HPP_
+#pragma once
 
 // Utilities for type casting
 
@@ -44,8 +43,8 @@ bit_cast(const From& src) noexcept {
     return dst;
 }
 
-inline ByteView string_view_to_byte_view(std::string_view sv) { return {byte_ptr_cast(sv.data()), sv.length()}; }
+inline ByteView string_view_to_byte_view(std::string_view v) { return {byte_ptr_cast(v.data()), v.length()}; }
+
+inline std::string_view byte_view_to_string_view(ByteView v) { return {byte_ptr_cast(v.data()), v.length()}; }
 
 }  // namespace silkworm
-
-#endif  // SILKWORM_COMMON_CAST_HPP_

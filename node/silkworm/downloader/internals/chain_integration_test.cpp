@@ -1,17 +1,17 @@
 /*
-    Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+       http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
 */
 
 #include <algorithm>
@@ -25,8 +25,8 @@
 #include <silkworm/consensus/engine.hpp>
 #include <silkworm/db/genesis.hpp>
 
-#include "header_persistence.hpp"
 #include "header_chain.hpp"
+#include "header_persistence.hpp"
 
 namespace silkworm {
 
@@ -38,7 +38,7 @@ class HeaderChain_ForTest : public HeaderChain {
 
 class DummyConsensusEngine : public consensus::IEngine {
   public:
-    ValidationResult pre_validate_block(const Block&, const BlockState&) override { return ValidationResult::kOk; }
+    ValidationResult pre_validate_block_body(const Block&, const BlockState&) override { return ValidationResult::kOk; }
 
     ValidationResult validate_ommers(const Block&, const BlockState&) override { return ValidationResult::kOk; }
 
@@ -60,7 +60,7 @@ TEST_CASE("working/persistent-chain integration test") {
     auto source_data = silkworm::read_genesis_data(silkworm::kMainnetConfig.chain_id);
     auto genesis_json = nlohmann::json::parse(source_data, nullptr, allow_exceptions);
     db::initialize_genesis(txn, genesis_json, allow_exceptions);
-    context.commit_and_renew_txn();
+    context.commit_txn();
 
     /* status:
      *         h0 (persisted)
@@ -69,10 +69,10 @@ TEST_CASE("working/persistent-chain integration test") {
      *                |-- h1'
      */
     SECTION("accepting 1 batch of headers") {
-        Db::ReadWriteAccess::Tx tx(txn);  // sub transaction
+        db::RWTxn tx(context.env());
 
         // starting from an initial status
-        auto header0 = tx.read_canonical_header(0);
+        auto header0 = db::read_canonical_header(tx, 0);
         auto header0_hash = header0->hash();
         BlockNum highest_in_db = 0;
 
@@ -91,7 +91,7 @@ TEST_CASE("working/persistent-chain integration test") {
         // header1.gas_limit = 5000;
         // header1.timestamp = ++timestamp;
         // header1.difficulty = canonical_difficulty(header1.number, header1.timestamp, header0->difficulty,
-        // header0->timestamp, false, ChainIdentity::mainnet.chain);
+        // header0->timestamp, false, kMainnetIdentity.config);
         header1.parent_hash = header0_hash;
         auto header1_hash = header1.hash();
 
@@ -111,7 +111,7 @@ TEST_CASE("working/persistent-chain integration test") {
 
         // processing the headers
         std::vector<BlockHeader> headers = {header1, header2, header1b};
-        PeerId peer_id = "1";
+        PeerId peer_id{byte_ptr_cast("1")};
         wc.accept_headers(headers, request_id, peer_id);
 
         // saving headers ready to persist as the header downloader does in the forward() method
@@ -130,23 +130,23 @@ TEST_CASE("working/persistent-chain integration test") {
         REQUIRE(pc.unwind_needed() == false);
 
         // check db content
-        REQUIRE(tx.read_head_header_hash() == header2_hash);
-        REQUIRE(tx.read_total_difficulty(2, header2.hash()) == expected_td);
+        REQUIRE(db::read_head_header_hash(tx) == header2_hash);
+        REQUIRE(db::read_total_difficulty(tx, 2, header2.hash()) == expected_td);
 
-        auto header1_in_db = tx.read_header(header1_hash);
+        auto header1_in_db = db::read_header(tx, header1_hash);
         REQUIRE(header1_in_db.has_value());
         REQUIRE(header1_in_db == header1);
-        auto header2_in_db = tx.read_header(header2_hash);
+        auto header2_in_db = db::read_header(tx, header2_hash);
         REQUIRE(header2_in_db.has_value());
         REQUIRE(header2_in_db == header2);
-        auto header1b_in_db = tx.read_header(header1b_hash);
+        auto header1b_in_db = db::read_header(tx, header1b_hash);
         REQUIRE(header1b_in_db.has_value());
         REQUIRE(header1b_in_db == header1b);
 
-        pc.close();  // here pc update the canonical chain on the db
+        pc.finish();  // here pc update the canonical chain on the db
 
-        REQUIRE(tx.read_canonical_hash(1) == header1_hash);
-        REQUIRE(tx.read_canonical_hash(2) == header2_hash);
+        REQUIRE(db::read_canonical_hash(tx, 1) == header1_hash);
+        REQUIRE(db::read_canonical_hash(tx, 2) == header2_hash);
     }
 
     /* status:
@@ -160,10 +160,10 @@ TEST_CASE("working/persistent-chain integration test") {
      *               |--- h1'
      */
     SECTION("accepting 2 batch of headers, the second not changing the temporary canonical") {
-        Db::ReadWriteAccess::Tx tx(txn);  // sub transaction
+        db::RWTxn tx(context.env());
 
         // starting from an initial status
-        auto header0 = tx.read_canonical_header(0);
+        auto header0 = db::read_canonical_header(tx, 0);
         auto header0_hash = header0->hash();
         BlockNum highest_in_db = 0;
 
@@ -188,7 +188,7 @@ TEST_CASE("working/persistent-chain integration test") {
 
         // processing the headers
         std::vector<BlockHeader> headers = {header1, header2};
-        PeerId peer_id = "1";
+        PeerId peer_id{byte_ptr_cast("1")};
         wc.accept_headers(headers, request_id, peer_id);
 
         // creating the persisted chain as the header downloader does at the beginning of the forward() method
@@ -208,13 +208,13 @@ TEST_CASE("working/persistent-chain integration test") {
         REQUIRE(pc.unwind_needed() == false);
 
         // check db content
-        REQUIRE(tx.read_head_header_hash() == header2_hash);
-        REQUIRE(tx.read_total_difficulty(2, header2.hash()) == expected_td);
+        REQUIRE(db::read_head_header_hash(tx) == header2_hash);
+        REQUIRE(db::read_total_difficulty(tx, 2, header2.hash()) == expected_td);
 
-        auto header1_in_db = tx.read_header(header1_hash);
+        auto header1_in_db = db::read_header(tx, header1_hash);
         REQUIRE(header1_in_db.has_value());
         REQUIRE(header1_in_db == header1);
-        auto header2_in_db = tx.read_header(header2_hash);
+        auto header2_in_db = db::read_header(tx, header2_hash);
         REQUIRE(header2_in_db.has_value());
         REQUIRE(header2_in_db == header2);
 
@@ -227,14 +227,14 @@ TEST_CASE("working/persistent-chain integration test") {
         auto header1b_hash = header1b.hash();
 
         std::vector<BlockHeader> headers_bis = {header1b};
-        peer_id = "2";
+        peer_id = byte_ptr_cast("2");
         wc.accept_headers(headers_bis, request_id, peer_id);
 
         // saving headers ready to persist as the header downloader does in the forward() method
         Headers headers_to_persist_bis = wc.withdraw_stable_headers();
         pc.persist(headers_to_persist_bis);
 
-        auto header1b_in_db = tx.read_header(header1b_hash);
+        auto header1b_in_db = db::read_header(tx, header1b_hash);
         REQUIRE(header1b_in_db.has_value());
         REQUIRE(header1b_in_db == header1b);
 
@@ -245,21 +245,21 @@ TEST_CASE("working/persistent-chain integration test") {
         REQUIRE(pc.highest_hash() == header2_hash);
         REQUIRE(pc.unwind_needed() == false);
 
-        REQUIRE(tx.read_head_header_hash() == header2_hash);
-        REQUIRE(tx.read_total_difficulty(2, header2.hash()) == expected_td);
+        REQUIRE(db::read_head_header_hash(tx) == header2_hash);
+        REQUIRE(db::read_total_difficulty(tx, 2, header2.hash()) == expected_td);
 
-        header1_in_db = tx.read_header(header1_hash);
+        header1_in_db = db::read_header(tx, header1_hash);
         REQUIRE(header1_in_db.has_value());
         REQUIRE(header1_in_db == header1);
-        header2_in_db = tx.read_header(header2_hash);
+        header2_in_db = db::read_header(tx, header2_hash);
         REQUIRE(header2_in_db.has_value());
         REQUIRE(header2_in_db == header2);
 
         // updating the canonical chain on the db
-        pc.close();
+        pc.finish();
 
-        REQUIRE(tx.read_canonical_hash(1) == header1_hash);
-        REQUIRE(tx.read_canonical_hash(2) == header2_hash);
+        REQUIRE(db::read_canonical_hash(tx, 1) == header1_hash);
+        REQUIRE(db::read_canonical_hash(tx, 2) == header2_hash);
     }
 
     /* status:
@@ -273,10 +273,10 @@ TEST_CASE("working/persistent-chain integration test") {
      *               |--- h1'             (canonical chain)
      */
     SECTION("accepting 2 batch of headers, the second changing the temporary canonical having height lower") {
-        Db::ReadWriteAccess::Tx tx(txn);  // sub transaction
+        db::RWTxn tx(context.env());
 
         // starting from an initial status
-        auto header0 = tx.read_canonical_header(0);
+        auto header0 = db::read_canonical_header(tx, 0);
         auto header0_hash = header0->hash();
         BlockNum highest_in_db = 0;
 
@@ -301,7 +301,7 @@ TEST_CASE("working/persistent-chain integration test") {
 
         // processing the headers
         std::vector<BlockHeader> headers = {header1, header2};
-        PeerId peer_id = "1";
+        PeerId peer_id{byte_ptr_cast("1")};
         wc.accept_headers(headers, request_id, peer_id);
 
         // creating the persisted chain as the header downloader does at the beginning of the forward() method
@@ -321,13 +321,13 @@ TEST_CASE("working/persistent-chain integration test") {
         REQUIRE(pc.unwind_needed() == false);
 
         // check db content
-        REQUIRE(tx.read_head_header_hash() == header2_hash);
-        REQUIRE(tx.read_total_difficulty(2, header2.hash()) == expected_td);
+        REQUIRE(db::read_head_header_hash(tx) == header2_hash);
+        REQUIRE(db::read_total_difficulty(tx, 2, header2.hash()) == expected_td);
 
-        auto header1_in_db = tx.read_header(header1_hash);
+        auto header1_in_db = db::read_header(tx, header1_hash);
         REQUIRE(header1_in_db.has_value());
         REQUIRE(header1_in_db == header1);
-        auto header2_in_db = tx.read_header(header2_hash);
+        auto header2_in_db = db::read_header(tx, header2_hash);
         REQUIRE(header2_in_db.has_value());
         REQUIRE(header2_in_db == header2);
 
@@ -340,14 +340,14 @@ TEST_CASE("working/persistent-chain integration test") {
         auto header1b_hash = header1b.hash();
 
         std::vector<BlockHeader> headers_bis = {header1b};
-        peer_id = "2";
+        peer_id = byte_ptr_cast("2");
         wc.accept_headers(headers_bis, request_id, peer_id);
 
         // saving headers ready to persist as the header downloader does in the forward() method
         Headers headers_to_persist_bis = wc.withdraw_stable_headers();
         pc.persist(headers_to_persist_bis);
 
-        auto header1b_in_db = tx.read_header(header1b_hash);
+        auto header1b_in_db = db::read_header(tx, header1b_hash);
         REQUIRE(header1b_in_db.has_value());
         REQUIRE(header1b_in_db == header1b);
 
@@ -360,22 +360,22 @@ TEST_CASE("working/persistent-chain integration test") {
         REQUIRE(pc.highest_hash() == header1b_hash);
         REQUIRE(pc.unwind_needed() == false);  // because the prev canonical was not persisted
 
-        REQUIRE(tx.read_head_header_hash() == header1b_hash);
-        REQUIRE(tx.read_total_difficulty(1, header1b.hash()) == expected_td_bis);
-        REQUIRE(tx.read_total_difficulty(2, header2.hash()) == expected_td);
+        REQUIRE(db::read_head_header_hash(tx) == header1b_hash);
+        REQUIRE(db::read_total_difficulty(tx, 1, header1b.hash()) == expected_td_bis);
+        REQUIRE(db::read_total_difficulty(tx, 2, header2.hash()) == expected_td);
 
-        header1_in_db = tx.read_header(header1_hash);
+        header1_in_db = db::read_header(tx, header1_hash);
         REQUIRE(header1_in_db.has_value());
         REQUIRE(header1_in_db == header1);
-        header2_in_db = tx.read_header(header2_hash);
+        header2_in_db = db::read_header(tx, header2_hash);
         REQUIRE(header2_in_db.has_value());
         REQUIRE(header2_in_db == header2);
 
         // updating the canonical chain on the db
-        pc.close();
+        pc.finish();
 
-        REQUIRE(tx.read_canonical_hash(1) == header1b_hash);
-        REQUIRE(tx.read_canonical_hash(2).has_value() == false);
+        REQUIRE(db::read_canonical_hash(tx, 1) == header1b_hash);
+        REQUIRE(db::read_canonical_hash(tx, 2).has_value() == false);
     }
 
     /* status:
@@ -389,10 +389,10 @@ TEST_CASE("working/persistent-chain integration test") {
      *               |--- h1 <----- h2
      */
     SECTION("accepting 2 batch of headers, the second changing the temporary canonical") {
-        Db::ReadWriteAccess::Tx tx(txn);  // sub transaction
+        db::RWTxn tx(context.env());
 
         // starting from an initial status
-        auto header0 = tx.read_canonical_header(0);
+        auto header0 = db::read_canonical_header(tx, 0);
         auto header0_hash = header0->hash();
         BlockNum highest_in_db = 0;
 
@@ -411,7 +411,7 @@ TEST_CASE("working/persistent-chain integration test") {
         auto header1b_hash = header1b.hash();
 
         std::vector<BlockHeader> headers = {header1b};
-        PeerId peer_id = "1";
+        PeerId peer_id{byte_ptr_cast("1")};
         wc.accept_headers(headers, request_id, peer_id);
 
         // creating the persisted chain as the header downloader does at the beginning of the forward() method
@@ -431,10 +431,10 @@ TEST_CASE("working/persistent-chain integration test") {
         REQUIRE(pc.unwind_needed() == false);
 
         // check db content
-        REQUIRE(tx.read_head_header_hash() == header1b_hash);
-        REQUIRE(tx.read_total_difficulty(1, header1b.hash()) == expected_td);
+        REQUIRE(db::read_head_header_hash(tx) == header1b_hash);
+        REQUIRE(db::read_total_difficulty(tx, 1, header1b.hash()) == expected_td);
 
-        auto header1b_in_db = tx.read_header(header1b_hash);
+        auto header1b_in_db = db::read_header(tx, header1b_hash);
         REQUIRE(header1b_in_db.has_value());
         REQUIRE(header1b_in_db == header1b);
 
@@ -453,7 +453,7 @@ TEST_CASE("working/persistent-chain integration test") {
 
         // processing the headers
         std::vector<BlockHeader> headers_bis = {header1, header2};
-        peer_id = "2";
+        peer_id = byte_ptr_cast("2");
         wc.accept_headers(headers_bis, request_id, peer_id);
 
         // saving headers ready to persist as the header downloader does in the forward() method
@@ -470,24 +470,24 @@ TEST_CASE("working/persistent-chain integration test") {
         REQUIRE(pc.unwind_needed() == false);
 
         // check db
-        REQUIRE(tx.read_head_header_hash() == header2_hash);
-        REQUIRE(tx.read_total_difficulty(2, header2.hash()) == expected_td_bis);
+        REQUIRE(db::read_head_header_hash(tx) == header2_hash);
+        REQUIRE(db::read_total_difficulty(tx, 2, header2.hash()) == expected_td_bis);
 
-        auto header1_in_db = tx.read_header(header1_hash);
+        auto header1_in_db = db::read_header(tx, header1_hash);
         REQUIRE(header1_in_db.has_value());
         REQUIRE(header1_in_db == header1);
-        auto header2_in_db = tx.read_header(header2_hash);
+        auto header2_in_db = db::read_header(tx, header2_hash);
         REQUIRE(header2_in_db.has_value());
         REQUIRE(header2_in_db == header2);
-        header1b_in_db = tx.read_header(header1b_hash);
+        header1b_in_db = db::read_header(tx, header1b_hash);
         REQUIRE(header1b_in_db.has_value());
         REQUIRE(header1b_in_db == header1b);
 
         // updating the canonical chain on the db
-        pc.close();
+        pc.finish();
 
-        REQUIRE(tx.read_canonical_hash(1) == header1_hash);
-        REQUIRE(tx.read_canonical_hash(2) == header2_hash);
+        REQUIRE(db::read_canonical_hash(tx, 1) == header1_hash);
+        REQUIRE(db::read_canonical_hash(tx, 2) == header2_hash);
     }
 
     /* status:
@@ -497,7 +497,7 @@ TEST_CASE("working/persistent-chain integration test") {
      *               |-- h1' <----- h2' <----- h3' (new cononical) -> unwind?
      */
     //  SECTION("a header in a secondary chain") {
-    //      // todo
+    //      // ...
     //  }
 
     /* status:
@@ -508,7 +508,7 @@ TEST_CASE("working/persistent-chain integration test") {
      *               |-- h1' <----- h2' <----- h3' (new cononical) -> unwind?
      */
     //  SECTION("a forking point in the past") {
-    //       // todo
+    //       // ...
     //  }
 }
 

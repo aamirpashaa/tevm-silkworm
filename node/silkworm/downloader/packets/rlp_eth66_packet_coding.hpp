@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_RLPETH66PACKETS_HPP
-#define SILKWORM_RLPETH66PACKETS_HPP
+#pragma once
 
 #include <type_traits>
 
@@ -87,5 +86,3 @@ inline DecodingResult decode_eth66_packet(ByteView& from, T& to) noexcept {
 }
 
 }  // namespace silkworm::rlp
-
-#endif  // SILKWORM_RLPETH66PACKETS_HPP

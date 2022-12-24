@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
 */
 
 #pragma once
-#ifndef SILKWORM_COMMON_RLP_ERR_HPP_
-#define SILKWORM_COMMON_RLP_ERR_HPP_
 
 #include <magic_enum.hpp>
 
@@ -45,5 +43,3 @@ inline void success_or_throw(DecodingResult err) {
 }
 
 }  // namespace silkworm::rlp
-
-#endif  // !SILKWORM_COMMON_RLP_ERR_HPP_

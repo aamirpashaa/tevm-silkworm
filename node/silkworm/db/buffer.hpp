@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_DB_BUFFER_HPP_
-#define SILKWORM_DB_BUFFER_HPP_
+#pragma once
 
 #include <cassert>
 #include <optional>
@@ -168,5 +167,3 @@ class Buffer : public State {
 };
 
 }  // namespace silkworm::db
-
-#endif  // SILKWORM_DB_BUFFER_HPP_

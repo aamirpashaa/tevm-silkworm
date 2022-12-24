@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_CHAIN_INTRINSIC_GAS_HPP_
-#define SILKWORM_CHAIN_INTRINSIC_GAS_HPP_
+#pragma once
 
 #include <intx/intx.hpp>
 
@@ -25,9 +24,7 @@ namespace silkworm {
 
 // Returns the intrinsic gas of a transaction.
 // Refer to g0 in Section 6.2 "Execution" of the Yellow Paper
-// and EIP-2930 "Optional access lists"
-intx::uint128 intrinsic_gas(const Transaction& txn, bool homestead, bool istanbul) noexcept;
+// and EIP-3860 "Limit and meter initcode".
+intx::uint128 intrinsic_gas(const Transaction& txn, evmc_revision rev) noexcept;
 
 }  // namespace silkworm
-
-#endif  // SILKWORM_CHAIN_INTRINSIC_GAS_HPP_

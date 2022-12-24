@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,21 +14,32 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_COMMON_BASE_HPP_
-#define SILKWORM_COMMON_BASE_HPP_
+#pragma once
 
-// The most common and basic types and constants.
+// The most common and basic macros, concepts, types, and constants.
 
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
 
 #include <evmc/evmc.hpp>
+#include <intx/intx.hpp>
+
+#if defined(__wasm__)
+#define SILKWORM_THREAD_LOCAL static
+#else
+#define SILKWORM_THREAD_LOCAL thread_local
+#endif
 
 namespace silkworm {
 
 using namespace evmc::literals;
+
+template <class T>
+concept UnsignedIntegral = std::unsigned_integral<T> || std::same_as<T, intx::uint128> ||
+    std::same_as<T, intx::uint256> || std::same_as<T, intx::uint512>;
 
 using Bytes = std::basic_string<uint8_t>;
 
@@ -54,6 +65,8 @@ class ByteView : public std::basic_string_view<uint8_t> {
     constexpr ByteView(const evmc::address& address) noexcept : ByteView{address.bytes} {}
 
     constexpr ByteView(const evmc::bytes32& hash) noexcept : ByteView{hash.bytes} {}
+
+    [[nodiscard]] bool is_null() const noexcept { return data() == nullptr; }
 };
 
 using BlockNum = uint64_t;
@@ -87,5 +100,3 @@ constexpr uint64_t operator"" _Gibi(unsigned long long x) { return x * kGibi; }
 constexpr uint64_t operator"" _Tebi(unsigned long long x) { return x * kTebi; }
 
 }  // namespace silkworm
-
-#endif  // SILKWORM_COMMON_BASE_HPP_

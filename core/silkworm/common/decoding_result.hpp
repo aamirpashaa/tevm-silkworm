@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_COMMON_DECODING_RESULT_HPP_
-#define SILKWORM_COMMON_DECODING_RESULT_HPP_
+#pragma once
 
 namespace silkworm {
 
@@ -34,8 +33,9 @@ enum class [[nodiscard]] DecodingResult{
     kUnsupportedTransactionType,  // EIP-2718
     kInvalidFieldset,
     kUnexpectedEip2718Serialization,
+    kInvalidHashesLength,  // trie::Node decoding
+    kInvalidMasksSubsets,  // trie::Node decoding
+
 };
 
 }  // namespace silkworm
-
-#endif  // SILKWORM_COMMON_DECODING_RESULT_HPP_

@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -120,11 +120,12 @@ void IntraBlockState::touch(const evmc::address& address) noexcept {
     }
 }
 
-void IntraBlockState::record_suicide(const evmc::address& address) noexcept {
+bool IntraBlockState::record_suicide(const evmc::address& address) noexcept {
     const bool inserted{self_destructs_.insert(address).second};
     if (inserted) {
         journal_.emplace_back(new state::SuicideDelta{address});
     }
+    return inserted;
 }
 
 void IntraBlockState::destruct_suicides() {
@@ -337,7 +338,6 @@ IntraBlockState::Snapshot IntraBlockState::take_snapshot() const noexcept {
     IntraBlockState::Snapshot snapshot;
     snapshot.journal_size_ = journal_.size();
     snapshot.log_size_ = logs_.size();
-    snapshot.refund_ = refund_;
     return snapshot;
 }
 
@@ -347,7 +347,6 @@ void IntraBlockState::revert_to_snapshot(const IntraBlockState::Snapshot& snapsh
     }
     journal_.resize(snapshot.journal_size_);
     logs_.resize(snapshot.log_size_);
-    refund_ = snapshot.refund_;
 }
 
 void IntraBlockState::finalize_transaction() {
@@ -367,16 +366,11 @@ void IntraBlockState::clear_journal_and_substate() {
     self_destructs_.clear();
     logs_.clear();
     touched_.clear();
-    refund_ = 0;
     // EIP-2929
     accessed_addresses_.clear();
     accessed_storage_keys_.clear();
 }
 
 void IntraBlockState::add_log(const Log& log) noexcept { logs_.push_back(log); }
-
-void IntraBlockState::add_refund(uint64_t addend) noexcept { refund_ += addend; }
-
-void IntraBlockState::subtract_refund(uint64_t subtrahend) noexcept { refund_ -= subtrahend; }
 
 }  // namespace silkworm

@@ -6,5 +6,4 @@ xcode
 .vscode-upload.json
 .vs
 CMakeFiles
-Makefile
 cmake-build-*

@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -84,7 +84,7 @@ namespace rlp {
         if (DecodingResult err{decode(from, to.account.bytes)}; err != DecodingResult::kOk) {
             return err;
         }
-        if (DecodingResult err{decode_vector(from, to.storage_keys)}; err != DecodingResult::kOk) {
+        if (DecodingResult err{decode(from, to.storage_keys)}; err != DecodingResult::kOk) {
             return err;
         }
 
@@ -159,8 +159,8 @@ namespace rlp {
             encode(to, txn.s);
         } else if (txn.chain_id) {
             encode(to, *txn.chain_id);
-            encode(to, 0);
-            encode(to, 0);
+            encode(to, 0u);
+            encode(to, 0u);
         }
     }
 
@@ -313,7 +313,7 @@ namespace rlp {
         if (DecodingResult err{decode(from, to.data)}; err != DecodingResult::kOk) {
             return err;
         }
-        if (DecodingResult err{decode_vector(from, to.access_list)}; err != DecodingResult::kOk) {
+        if (DecodingResult err{decode(from, to.access_list)}; err != DecodingResult::kOk) {
             return err;
         }
         if (DecodingResult err{decode(from, to.odd_y_parity)}; err != DecodingResult::kOk) {

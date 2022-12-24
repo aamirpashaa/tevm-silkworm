@@ -1,5 +1,5 @@
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,10 +14,11 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_RECEIVE_MESSAGES_HPP
-#define SILKWORM_RECEIVE_MESSAGES_HPP
+#pragma once
 
-#include <silkworm/downloader/sentry_client.hpp>
+#include <p2psentry/sentry.grpc.pb.h>
+
+#include <silkworm/downloader/internals/grpc_sync_client.hpp>
 
 namespace silkworm::rpc {
 
@@ -25,9 +26,14 @@ class ReceiveMessages : public rpc::OutStreamingCall<sentry::Sentry, sentry::Mes
   public:
     ReceiveMessages(int scope);
 
-    static SentryClient::Scope scope(const sentry::InboundMessage&);
+    enum Scope {
+        BlockRequests = 0x01,
+        BlockAnnouncements = 0x02,
+        Other = 0x04
+    };
+    // enum values enable bit masking, for example: cope = BlockRequests & BlockAnnouncements
+
+    static Scope scope(const sentry::InboundMessage&);
 };
 
 }  // namespace silkworm::rpc
-
-#endif  // SILKWORM_RECEIVE_MESSAGES_HPP

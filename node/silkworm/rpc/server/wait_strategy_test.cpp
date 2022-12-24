@@ -26,7 +26,7 @@
 #include <catch2/catch.hpp>
 #include <grpcpp/grpcpp.h>
 
-using namespace std::chrono_literals; // NOLINT(build/namespaces)
+using namespace std::chrono_literals;  // NOLINT(build/namespaces)
 
 namespace silkworm::rpc {
 
@@ -34,9 +34,9 @@ using Catch::Matchers::Message;
 
 TEST_CASE("parse wait mode", "[silkrpc][common][log]") {
     std::vector<absl::string_view> input_texts{
-        "blocking", "sleeping", "yielding", "busy_spin"
-    };
+        "backoff", "blocking", "sleeping", "yielding", "busy_spin"};
     std::vector<WaitMode> expected_wait_modes{
+        WaitMode::backoff,
         WaitMode::blocking,
         WaitMode::sleeping,
         WaitMode::yielding,
@@ -62,21 +62,21 @@ TEST_CASE("parse invalid wait mode", "[silkrpc][common][log]") {
 
 TEST_CASE("unparse wait mode", "[silkrpc][common][log]") {
     std::vector<WaitMode> input_wait_modes{
+        WaitMode::backoff,
         WaitMode::blocking,
         WaitMode::sleeping,
         WaitMode::yielding,
         WaitMode::busy_spin,
     };
     std::vector<absl::string_view> expected_texts{
-        "blocking", "sleeping", "yielding", "busy_spin"
-    };
+        "backoff", "blocking", "sleeping", "yielding", "busy_spin"};
     for (std::size_t i{0}; i < input_wait_modes.size(); i++) {
         const auto text{AbslUnparseFlag(input_wait_modes[i])};
         CHECK(text == expected_texts[i]);
     }
 }
 
-template<typename W, typename R, typename P>
+template <typename W, typename R, typename P>
 inline void sleep_then_check_wait(W& w, const std::chrono::duration<R, P>& t, int executed_count) {
     std::this_thread::sleep_for(t);
     CHECK_NOTHROW(w.idle(executed_count));
@@ -106,4 +106,4 @@ TEST_CASE("BusySpinWaitStrategy", "[silkrpc][context_pool]") {
     sleep_then_check_wait(wait_strategy, 10ms, 1);
 }
 
-} // namespace silkworm::rpc
+}  // namespace silkworm::rpc

@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -17,12 +17,6 @@
 #include "endian.hpp"
 
 #include <silkworm/common/util.hpp>
-
-#if defined(__wasm__)
-#define SILKWORM_THREAD_LOCAL static
-#else
-#define SILKWORM_THREAD_LOCAL thread_local
-#endif
 
 namespace silkworm::endian {
 

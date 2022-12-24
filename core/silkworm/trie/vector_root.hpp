@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,11 +14,11 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_TRIE_VECTOR_ROOT_HPP_
-#define SILKWORM_TRIE_VECTOR_ROOT_HPP_
+#pragma once
 
 #include <silkworm/rlp/encode.hpp>
 #include <silkworm/trie/hash_builder.hpp>
+#include <silkworm/trie/nibbles.hpp>
 
 namespace silkworm::trie {
 
@@ -57,5 +57,3 @@ evmc::bytes32 root_hash(const std::vector<Value>& v, Encoder value_encoder) {
 }
 
 }  // namespace silkworm::trie
-
-#endif  // SILKWORM_TRIE_VECTOR_ROOT_HPP_

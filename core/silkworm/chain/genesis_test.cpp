@@ -1,6 +1,5 @@
-
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -15,17 +14,14 @@
    limitations under the License.
 */
 
-#include "genesis.hpp"
-
 #include <catch2/catch.hpp>
 #include <nlohmann/json.hpp>
 
+#include <silkworm/chain/config.hpp>
+#include <silkworm/chain/genesis.hpp>
 #include <silkworm/common/endian.hpp>
 #include <silkworm/common/util.hpp>
 #include <silkworm/state/in_memory_state.hpp>
-
-#include "config.hpp"
-#include "identity.hpp"
 
 namespace silkworm {
 
@@ -36,7 +32,7 @@ TEST_CASE("genesis config") {
 
     CHECK((genesis_json.contains("config") && genesis_json["config"].is_object()));
     auto config = ChainConfig::from_json(genesis_json["config"]);
-    CHECK(config.has_value());
+    REQUIRE(config.has_value());
     CHECK(config.value() == kMainnetConfig);
 
     genesis_data = read_genesis_data(static_cast<uint32_t>(kGoerliConfig.chain_id));
@@ -45,7 +41,7 @@ TEST_CASE("genesis config") {
 
     CHECK((genesis_json.contains("config") && genesis_json["config"].is_object()));
     config = ChainConfig::from_json(genesis_json["config"]);
-    CHECK(config.has_value());
+    REQUIRE(config.has_value());
     CHECK(config.value() == kGoerliConfig);
 
     genesis_data = read_genesis_data(static_cast<uint32_t>(kRinkebyConfig.chain_id));
@@ -54,35 +50,44 @@ TEST_CASE("genesis config") {
 
     CHECK((genesis_json.contains("config") && genesis_json["config"].is_object()));
     config = ChainConfig::from_json(genesis_json["config"]);
-    CHECK(config.has_value());
+    REQUIRE(config.has_value());
     CHECK(config.value() == kRinkebyConfig);
 
-    genesis_data = read_genesis_data(static_cast<uint32_t>(kTelosEVMMainnetConfig.chain_id));
+    genesis_data = read_genesis_data(static_cast<uint32_t>(kSepoliaConfig.chain_id));
     genesis_json = nlohmann::json::parse(genesis_data, nullptr, /* allow_exceptions = */ false);
     CHECK_FALSE(genesis_json.is_discarded());
 
     CHECK((genesis_json.contains("config") && genesis_json["config"].is_object()));
     config = ChainConfig::from_json(genesis_json["config"]);
-    CHECK(config.has_value());
-    CHECK(config.value() == kTelosEVMMainnetConfig);
-
-    genesis_data = read_genesis_data(static_cast<uint32_t>(kTelosEVMTestnetConfig.chain_id));
-    genesis_json = nlohmann::json::parse(genesis_data, nullptr, /* allow_exceptions = */ false);
-    CHECK_FALSE(genesis_json.is_discarded());
-
-    CHECK((genesis_json.contains("config") && genesis_json["config"].is_object()));
-    config = ChainConfig::from_json(genesis_json["config"]);
-    CHECK(config.has_value());
-    CHECK(config.value() == kTelosEVMTestnetConfig);
+    REQUIRE(config.has_value());
+    CHECK(config.value() == kSepoliaConfig);
 
     genesis_data = read_genesis_data(1'000u);
     genesis_json = nlohmann::json::parse(genesis_data, nullptr, /* allow_exceptions = */ false);
     CHECK(genesis_json.is_discarded());
+
+    CHECK((genesis_json.contains("config") && genesis_json["config"].is_object()));
+    config = ChainConfig::from_json(genesis_json["config"]);
+    REQUIRE(config.has_value());
+    CHECK(config.value() == kTelosEVMMainnetConfig);
+
+    genesis_data = read_genesis_data(static_cast<uint32_t>(kTelosEVMMainnetConfig.chain_id));
+    genesis_json = nlohmann::json::parse(genesis_data, nullptr, /* allow_exceptions = */ false);
+    CHECK(genesis_json.is_discarded());
+
+    CHECK((genesis_json.contains("config") && genesis_json["config"].is_object()));
+    config = ChainConfig::from_json(genesis_json["config"]);
+    REQUIRE(config.has_value());
+    CHECK(config.value() == kTelosEVMTestnetConfig);
+
+    genesis_data = read_genesis_data(static_cast<uint32_t>(kTelosEVMTestnetConfig.chain_id));
+    genesis_json = nlohmann::json::parse(genesis_data, nullptr, /* allow_exceptions = */ false);
+    CHECK(genesis_json.is_discarded());
 }
 
-TEST_CASE("mainnet_genesis") {
+nlohmann::json sanity_checked_json(uint64_t chain_id) {
     // Parse genesis data
-    std::string genesis_data = read_genesis_data(static_cast<uint32_t>(kMainnetConfig.chain_id));
+    std::string genesis_data = read_genesis_data(static_cast<uint32_t>(chain_id));
     nlohmann::json genesis_json = nlohmann::json::parse(genesis_data, nullptr, /* allow_exceptions = */ false);
     CHECK_FALSE(genesis_json.is_discarded());
 
@@ -93,6 +98,10 @@ TEST_CASE("mainnet_genesis") {
     CHECK(genesis_json.contains("extraData"));
     CHECK((genesis_json.contains("alloc") && genesis_json["alloc"].is_object() && !genesis_json["alloc"].empty()));
 
+    return genesis_json;
+}
+
+evmc::bytes32 state_root(const nlohmann::json& genesis_json) {
     InMemoryState state;
 
     for (auto& item : genesis_json["alloc"].items()) {
@@ -107,44 +116,22 @@ TEST_CASE("mainnet_genesis") {
         state.update_account(account_address, std::nullopt, account);
     }
 
-    SECTION("state_root") {
-        auto expected_state_root{0xd7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544_bytes32};
-        auto actual_state_root{state.state_root_hash()};
-        CHECK(to_hex(expected_state_root) == to_hex(actual_state_root));
-    }
+    return state.state_root_hash();
+}
 
-    // Fill Header
-    BlockHeader header;
-    auto parent_hash{from_hex(genesis_json["parentHash"].get<std::string>())};
-    if (parent_hash.has_value()) {
-        header.parent_hash = to_bytes32(*parent_hash);
-    }
-    header.ommers_hash = kEmptyListHash;
-    header.beneficiary = 0x0000000000000000000000000000000000000000_address;
-    header.state_root = state.state_root_hash();
-    header.transactions_root = kEmptyRoot;
-    header.receipts_root = kEmptyRoot;
-    auto difficulty_str{genesis_json["difficulty"].get<std::string>()};
-    header.difficulty = intx::from_string<intx::uint256>(difficulty_str);
-    header.number = 0;
-    header.gas_limit = std::stoull(genesis_json["gasLimit"].get<std::string>(), nullptr, 0);
-    header.timestamp = std::stoull(genesis_json["timestamp"].get<std::string>(), nullptr, 0);
+// https://etherscan.io/block/0
+TEST_CASE("mainnet_genesis") {
+    nlohmann::json genesis_json = sanity_checked_json(kMainnetConfig.chain_id);
 
-    auto extra_data = from_hex(genesis_json["extraData"].get<std::string>());
-    if (extra_data.has_value()) {
-        header.extra_data = *extra_data;
-    }
+    auto expected_state_root{0xd7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544_bytes32};
+    auto actual_state_root{state_root(genesis_json)};
+    CHECK(to_hex(expected_state_root) == to_hex(actual_state_root));
 
-    auto mix_data = from_hex(genesis_json["mixhash"].get<std::string>());
-    CHECK((mix_data.has_value() && mix_data->size() == kHashLength));
-    header.mix_hash = to_bytes32(*mix_data);
-
-    auto nonce = std::stoull(genesis_json["nonce"].get<std::string>(), nullptr, 0);
-    endian::store_big_u64(header.nonce.data(), nonce);
+    BlockHeader header{read_genesis_header(genesis_json, actual_state_root)};
 
     // Verify our RLP encoding produces the same result
     auto computed_hash{header.hash()};
-    CHECK(to_hex(computed_hash) == to_hex(ChainIdentity::mainnet.genesis_hash));
+    CHECK(to_hex(computed_hash) == to_hex(kMainnetGenesisHash));
 
     // TODO (Andrea) Why this fails for genesis ?
     // auto seal_hash(header.hash(/*for_sealing =*/true));
@@ -156,4 +143,67 @@ TEST_CASE("mainnet_genesis") {
     // CHECK(ethash::is_less_or_equal(result.final_hash, boundary));
 }
 
+// https://rinkeby.etherscan.io/block/0
+TEST_CASE("Rinkeby genesis") {
+    nlohmann::json genesis_json = sanity_checked_json(kRinkebyConfig.chain_id);
+
+    auto expected_state_root{0x53580584816f617295ea26c0e17641e0120cab2f0a8ffb53a866fd53aa8e8c2d_bytes32};
+    auto actual_state_root{state_root(genesis_json)};
+    CHECK(to_hex(expected_state_root) == to_hex(actual_state_root));
+
+    BlockHeader header{read_genesis_header(genesis_json, actual_state_root)};
+    auto computed_hash{header.hash()};
+    CHECK(to_hex(computed_hash) == to_hex(kRinkebyGenesisHash));
+}
+
+// https://goerli.etherscan.io/block/0
+TEST_CASE("Goerli genesis") {
+    nlohmann::json genesis_json = sanity_checked_json(kGoerliConfig.chain_id);
+
+    auto expected_state_root{0x5d6cded585e73c4e322c30c2f782a336316f17dd85a4863b9d838d2d4b8b3008_bytes32};
+    auto actual_state_root{state_root(genesis_json)};
+    CHECK(to_hex(expected_state_root) == to_hex(actual_state_root));
+
+    BlockHeader header{read_genesis_header(genesis_json, actual_state_root)};
+    auto computed_hash{header.hash()};
+    CHECK(to_hex(computed_hash) == to_hex(kGoerliGenesisHash));
+}
+
+// https://sepolia.etherscan.io/block/0
+TEST_CASE("Sepolia genesis") {
+    nlohmann::json genesis_json = sanity_checked_json(kSepoliaConfig.chain_id);
+    CHECK(genesis_json["extraData"] == "Sepolia, Athens, Attica, Greece!");
+
+    auto expected_state_root{0x5eb6e371a698b8d68f665192350ffcecbbbf322916f4b51bd79bb6887da3f494_bytes32};
+    auto actual_state_root{state_root(genesis_json)};
+    CHECK(to_hex(expected_state_root) == to_hex(actual_state_root));
+
+    BlockHeader header{read_genesis_header(genesis_json, actual_state_root)};
+    auto computed_hash{header.hash()};
+    CHECK(to_hex(computed_hash) == to_hex(kSepoliaGenesisHash));
+}
+
+TEST_CASE("TelosEVMMainnet genesis") {
+    nlohmann::json genesis_json = sanity_checked_json(kTelosEVMMainnetConfig.chain_id);
+
+    auto expected_state_root{0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421_bytes32};
+    auto actual_state_root{state_root(genesis_json)};
+    CHECK(to_hex(expected_state_root) == to_hex(actual_state_root));
+
+    BlockHeader header{read_genesis_header(genesis_json, actual_state_root)};
+    auto computed_hash{header.hash()};
+    CHECK(to_hex(computed_hash) == to_hex(kTelosEVMMainnetGenesisHash));
+}
+
+TEST_CASE("TelosEVMTestnet genesis") {
+    nlohmann::json genesis_json = sanity_checked_json(kTelosEVMTestnetConfig.chain_id);
+
+    auto expected_state_root{0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421_bytes32};
+    auto actual_state_root{state_root(genesis_json)};
+    CHECK(to_hex(expected_state_root) == to_hex(actual_state_root));
+
+    BlockHeader header{read_genesis_header(genesis_json, actual_state_root)};
+    auto computed_hash{header.hash()};
+    CHECK(to_hex(computed_hash) == to_hex(kTelosEVMTestnetGenesisHash));
+}
 }  // namespace silkworm

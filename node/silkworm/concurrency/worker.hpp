@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_CONCURRENCY_WORKER_HPP_
-#define SILKWORM_CONCURRENCY_WORKER_HPP_
+#pragma once
 
 #include <atomic>
 #include <condition_variable>
@@ -31,7 +30,13 @@ namespace silkworm {
 // If you only need stoppability, use ActiveComponent instead.
 class Worker {
   public:
-    enum class State { kStopped, kStarting, kStarted, kKickWaiting, kStopping };
+    enum class State {
+        kStopped,
+        kStarting,
+        kStarted,
+        kKickWaiting,
+        kStopping
+    };
 
     Worker() : name_{"worker"} {}
     explicit Worker(std::string& name) : name_{name} {}
@@ -91,5 +96,3 @@ class Worker {
 };
 
 }  // namespace silkworm
-
-#endif  // SILKWORM_CONCURRENCY_WORKER_HPP_

@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_COMMON_ENDIAN_HPP_
-#define SILKWORM_COMMON_ENDIAN_HPP_
+#pragma once
 
 /*
 Facilities to deal with byte order/endianness
@@ -78,15 +77,15 @@ ByteView to_big_compact(uint64_t value);
 ByteView to_big_compact(const intx::uint256& value);
 
 //! \brief Parses unsigned integer from a compacted big endian byte form.
-//! \param [in] data : byte view of compacted value. Length must be <= sizeof(UnsignedInteger);
-//! otherwise kOverflow is returned.
+//! \param [in] data : byte view of a compacted value.
+//! Its length must not be greater than the sizeof the UnsignedIntegral type; otherwise, kOverflow is returned.
 //! \param [out] out: the corresponding integer with native endianness.
 //! \return kOk or kOverflow or kLeadingZero.
 //! \remarks A "compact" big endian form strips leftmost bytes valued to zero;
 //! if the input is not compact kLeadingZero is returned.
-template <typename UnsignedInteger>
-static DecodingResult from_big_compact(ByteView data, UnsignedInteger& out) {
-    if (data.length() > sizeof(UnsignedInteger)) {
+template <UnsignedIntegral T>
+static DecodingResult from_big_compact(ByteView data, T& out) {
+    if (data.length() > sizeof(T)) {
         return DecodingResult::kOverflow;
     }
 
@@ -100,12 +99,10 @@ static DecodingResult from_big_compact(ByteView data, UnsignedInteger& out) {
     }
 
     auto* ptr{reinterpret_cast<uint8_t*>(&out)};
-    std::memcpy(ptr + (sizeof(UnsignedInteger) - data.length()), &data[0], data.length());
+    std::memcpy(ptr + (sizeof(T) - data.length()), &data[0], data.length());
 
     out = intx::to_big_endian(out);
     return DecodingResult::kOk;
 }
 
 }  // namespace silkworm::endian
-
-#endif  // SILKWORM_COMMON_ENDIAN_HPP_

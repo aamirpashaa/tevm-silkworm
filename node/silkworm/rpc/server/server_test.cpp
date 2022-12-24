@@ -16,7 +16,6 @@
 
 #include "server.hpp"
 
-#include <chrono>
 #include <thread>
 
 #include <catch2/catch.hpp>
@@ -25,28 +24,28 @@
 #include <grpcpp/impl/codegen/service_type.h>
 
 #include <silkworm/common/log.hpp>
-#include <silkworm/rpc/util.hpp>
+#include <silkworm/rpc/common/util.hpp>
+#include <silkworm/test/log.hpp>
 
 namespace silkworm::rpc {
 
-namespace { // Trick suggested by gRPC team to avoid name clashes in multiple test modules
-class MockService : public grpc::Service {
-};
+namespace {  // Trick suggested by gRPC team to avoid name clashes in multiple test modules
+    class MockService : public grpc::Service {};
 
-class EmptyServer : public Server {
-  public:
-    EmptyServer(const ServerConfig& config) : Server(config) {}
+    class EmptyServer : public Server {
+      public:
+        explicit EmptyServer(const ServerConfig& config) : Server(config) {}
 
-  protected:
-    void register_async_services(grpc::ServerBuilder& builder) override {
-        builder.RegisterService(&mock_async_service_);
-    }
-    void register_request_calls() override {}
+      protected:
+        void register_async_services(grpc::ServerBuilder& builder) override {
+            builder.RegisterService(&mock_async_service_);
+        }
+        void register_request_calls() override {}
 
-  private:
-    MockService mock_async_service_;
-};
-};
+      private:
+        MockService mock_async_service_;
+    };
+}  // namespace
 
 // TODO(canepat): better copy grpc_pick_unused_port_or_die to generate unused port
 static const std::string kTestAddressUri{"localhost:12345"};
@@ -74,7 +73,7 @@ TEST_CASE("Barebone gRPC Server", "[silkworm][node][rpc]") {
 }
 
 TEST_CASE("Server::Server", "[silkworm][node][rpc]") {
-    silkworm::log::set_verbosity(silkworm::log::Level::kNone);
+    test::SetLogVerbosityGuard guard{log::Level::kNone};
 
     SECTION("OK: create an empty Server", "[silkworm][node][rpc]") {
         ServerConfig config;
@@ -84,29 +83,23 @@ TEST_CASE("Server::Server", "[silkworm][node][rpc]") {
 }
 
 TEST_CASE("Server::build_and_start", "[silkworm][node][rpc]") {
-    silkworm::log::set_verbosity(silkworm::log::Level::kNone);
+    test::SetLogVerbosityGuard set_log_verbosity_guard{log::Level::kNone};
 
     // TODO(canepat): use GMock
     class TestServer : public EmptyServer {
       public:
         TestServer(const ServerConfig& config) : EmptyServer(config) {}
 
-        bool register_async_services_called() const {
-            return register_async_services_called_;
-        }
+        bool register_async_services_called() const { return register_async_services_called_; }
 
-        bool register_request_calls_called() const {
-            return register_request_calls_called_;
-        }
+        bool register_request_calls_called() const { return register_request_calls_called_; }
 
       protected:
         void register_async_services(grpc::ServerBuilder& /*builder*/) override {
             register_async_services_called_ = true;
         }
 
-        void register_request_calls() override {
-            register_request_calls_called_ = true;
-        }
+        void register_request_calls() override { register_request_calls_called_ = true; }
 
       private:
         bool register_async_services_called_{false};
@@ -129,7 +122,7 @@ TEST_CASE("Server::build_and_start", "[silkworm][node][rpc]") {
         GrpcNoLogGuard guard;
 
         ServerConfig config;
-        config.set_address_uri("local:12345"); // "localhost@12345" core dumped in gRPC 1.44.0-p0 (SIGSEGV)
+        config.set_address_uri("local:12345");  // "localhost@12345" core dumped in gRPC 1.44.0-p0 (SIGSEGV)
         EmptyServer server{config};
         CHECK_THROWS_AS(server.build_and_start(), std::runtime_error);
     }
@@ -145,7 +138,7 @@ TEST_CASE("Server::build_and_start", "[silkworm][node][rpc]") {
 }
 
 TEST_CASE("Server::shutdown", "[silkworm][node][rpc]") {
-    silkworm::log::set_verbosity(silkworm::log::Level::kNone);
+    test::SetLogVerbosityGuard guard{log::Level::kNone};
 
     SECTION("OK: build_and_start/shutdown", "[silkworm][node][rpc]") {
         ServerConfig config;
@@ -166,16 +159,14 @@ TEST_CASE("Server::shutdown", "[silkworm][node][rpc]") {
 }
 
 TEST_CASE("Server::join", "[silkworm][node][rpc]") {
-    silkworm::log::set_verbosity(silkworm::log::Level::kNone);
+    test::SetLogVerbosityGuard guard{log::Level::kNone};
 
     SECTION("OK: build_and_start/join/shutdown", "[silkworm][node][rpc]") {
         ServerConfig config;
         config.set_address_uri(kTestAddressUri);
         EmptyServer server{config};
         server.build_and_start();
-        std::thread server_thread{[&server]() {
-            server.join();
-        }};
+        std::thread server_thread{[&server]() { server.join(); }};
         CHECK_NOTHROW(server.shutdown());
         server_thread.join();
     }
@@ -185,14 +176,12 @@ TEST_CASE("Server::join", "[silkworm][node][rpc]") {
         config.set_address_uri(kTestAddressUri);
         EmptyServer server{config};
         server.build_and_start();
-        std::thread server_thread{[&server]() {
-            server.join();
-        }};
+        std::thread server_thread{[&server]() { server.join(); }};
         CHECK_NOTHROW(server.shutdown());
         CHECK_NOTHROW(server.shutdown());
         server_thread.join();
     }
 }
-#endif // SILKWORM_SANITIZE
+#endif  // SILKWORM_SANITIZE
 
-} // namespace silkworm::rpc
+}  // namespace silkworm::rpc

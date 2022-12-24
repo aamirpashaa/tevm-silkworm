@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_DB_STAGES_HPP_
-#define SILKWORM_DB_STAGES_HPP_
+#pragma once
 
 #include <silkworm/db/tables.hpp>
 
@@ -25,55 +24,61 @@
 
 namespace silkworm::db::stages {
 
-// Headers are downloaded, their Proof-Of-Work validity and chaining is verified
+//! \brief Headers are downloaded, their Proof-Of-Work validity and chaining is verified
 inline constexpr const char* kHeadersKey{"Headers"};
 
-// Headers Number are written, fills blockHash => number bucket
+//! \brief Headers Number are written, fills blockHash => number bucket
 inline constexpr const char* kBlockHashesKey{"BlockHashes"};
 
-// Block bodies are downloaded, TxHash and UncleHash are getting verified
+//! \brief Block bodies are downloaded, TxHash and UncleHash are getting verified
 inline constexpr const char* kBlockBodiesKey{"Bodies"};
 
-// "From" recovered from signatures
+//! \brief "From" recovered from signatures
 inline constexpr const char* kSendersKey{"Senders"};
 
-// Executing each block w/o building a trie
+//! \brief Executing each block w/o building a trie
 inline constexpr const char* kExecutionKey{"Execution"};
 
-// Generate intermediate hashes, calculate the state root hash
+//! \brief Generate intermediate hashes, calculate the state root hash
 inline constexpr const char* kIntermediateHashesKey{"IntermediateHashes"};
 
-// Apply Keccak256 to all the keys in the state
+//! \brief Apply Keccak256 to all the keys in the state
 inline constexpr const char* kHashStateKey{"HashState"};
 
-// Generating history index for accounts
+//! \brief Generating history index for accounts
+inline constexpr const char* kHistoryIndexKey{"HistoryIndex"};
+
+//! \brief Generating history index for accounts
 inline constexpr const char* kAccountHistoryIndexKey{"AccountHistoryIndex"};
 
-// Generating history index for storage
+//! \brief Generating history index for storage
 inline constexpr const char* kStorageHistoryIndexKey{"StorageHistoryIndex"};
 
-// Generating logs index (from receipts)
+//! \brief Generating logs index (from receipts)
 inline constexpr const char* kLogIndexKey{"LogIndex"};
 
-// Generating call traces index
+//! \brief Generating call traces index
 inline constexpr const char* kCallTracesKey{"CallTraces"};
 
-// Generating transactions lookup index
+//! \brief Generating transactions lookup index
 inline constexpr const char* kTxLookupKey{"TxLookup"};
 
-// Starts Backend
+//! \brief Starts Backend
 inline constexpr const char* kTxPoolKey{"TxPool"};
 
-// Nominal stage after all other stages
+//! \brief Nominal stage after all other stages
 inline constexpr const char* kFinishKey{"Finish"};
 
-// Create block for mining
+//! \brief Not an actual stage rather placeholder for global unwind point
+inline constexpr const char* kUnwindKey{"Unwind"};
+
+//! \brief Create block for mining
 inline constexpr const char* kMiningCreateBlockKey{"MiningCreateBlock"};
 
-//  Execute mining
+//! \brief  Execute mining
 inline constexpr const char* kMiningExecutionKey{"MiningExecution"};
 
-// Mining completed
+//! \brief Mining completed
 inline constexpr const char* kMiningFinishKey{"MiningFinish"};
 
 //! \brief List of all known stages
@@ -85,6 +90,7 @@ inline constexpr const char* kAllStages[]{
     kExecutionKey,
     kIntermediateHashesKey,
     kHashStateKey,
+    kHistoryIndexKey,
     kAccountHistoryIndexKey,
     kStorageHistoryIndexKey,
     kLogIndexKey,
@@ -92,7 +98,14 @@ inline constexpr const char* kAllStages[]{
     kTxLookupKey,
     kTxPoolKey,
     kFinishKey,
+    kUnwindKey,
 };
+
+//! \brief Stages won't log their "start" if segment is below this threshold
+inline constexpr size_t kSmallBlockSegmentWidth{16};
+
+//! \brief Some stages will use this threshold to determine if worth regen vs incremental
+inline constexpr size_t kLargeBlockSegmentWorthRegen{100'000};
 
 //! \brief Reads from db the progress (block height) of the provided stage name
 //! \param [in] txn : a reference to a ro/rw db transaction
@@ -142,5 +155,3 @@ void write_stage_unwind(mdbx::txn& txn, const char* stage_name, BlockNum block_n
 bool is_known_stage(const char* stage_name);
 
 }  // namespace silkworm::db::stages
-
-#endif  // !SILKWORM_DB_STAGES_HPP_

@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_CONSENSUS_ENGINE_HPP_
-#define SILKWORM_CONSENSUS_ENGINE_HPP_
+#pragma once
 
 #include <silkworm/consensus/validation.hpp>
 #include <silkworm/state/intra_block_state.hpp>
@@ -28,12 +27,12 @@ class IEngine {
   public:
     virtual ~IEngine() = default;
 
-    //! \brief Performs validation of block header & body that can be done prior to sender recovery and execution.
-    //! \brief See [YP] Sections 4.3.2 "Holistic Validity", 4.3.4 "Block Header Validity", and 11.1 "Ommer Validation".
+    //! \brief Performs validation of block body that can be done prior to sender recovery and execution.
+    //! \brief See [YP] Sections 4.3.2 "Holistic Validity" and 11.1 "Ommer Validation".
     //! \param [in] block: block to pre-validate.
     //! \param [in] state: current state.
     //! \note Shouldn't be used for genesis block.
-    virtual ValidationResult pre_validate_block(const Block& block, const BlockState& state) = 0;
+    virtual ValidationResult pre_validate_block_body(const Block& block, const BlockState& state) = 0;
 
     //! \brief See [YP] Section 4.3.4 "Block Header Validity".
     //! \param [in] header: header to validate.
@@ -76,5 +75,3 @@ ValidationResult pre_validate_transaction(const Transaction& txn, uint64_t block
 std::unique_ptr<IEngine> engine_factory(const ChainConfig& chain_config);
 
 }  // namespace silkworm::consensus
-
-#endif  // SILKWORM_CONSENSUS_ENGINE_HPP_

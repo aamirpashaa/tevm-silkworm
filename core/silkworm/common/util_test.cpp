@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -19,30 +19,6 @@
 #include <catch2/catch.hpp>
 
 namespace silkworm {
-
-TEST_CASE("Split") {
-    std::string source{};
-    std::string delim{};
-    auto output{split(source, delim)};
-    CHECK((output.size() == 1 && output.at(0) == source));
-
-    source = "aabbcc";
-    output = split(source, delim);
-    CHECK((output.size() == 1 && output.at(0) == source));
-
-    delim = "b";
-    output = split(source, delim);
-    CHECK((output.size() == 3 && output.at(0) == "aa" && output.at(1).empty() == true && output.at(2) == "cc"));
-
-    delim = "bb";
-    output = split(source, delim);
-    CHECK((output.size() == 2 && output.at(0) == "aa" && output.at(1) == "cc"));
-
-    source = "aaaaa";
-    delim = "a";
-    output = split(source, delim);
-    CHECK(output.size() == 5);
-}
 
 TEST_CASE("Hex") {
     CHECK(decode_hex_digit('g').has_value() == false);
@@ -194,6 +170,36 @@ TEST_CASE("human_size") {
 
     val = kKibi;
     CHECK(human_size(val) == "1.00 KB");
+}
+
+TEST_CASE("intx::uint256 from scientific notation string") {
+    const intx::uint256 kMainnetTTD{intx::from_string<intx::uint256>("58750000000000000000000")};
+    CHECK(from_string_sci<intx::uint256>("5.875e+22") == kMainnetTTD);
+    CHECK(from_string_sci<intx::uint256>("58750000000000000000000") == kMainnetTTD);
+
+    const intx::uint256 kSepoliaTTD{intx::from_string<intx::uint256>("17000000000000000")};
+    CHECK(from_string_sci<intx::uint256>("1.7e+16") == kSepoliaTTD);
+    CHECK(from_string_sci<intx::uint256>("17000000000000000") == kSepoliaTTD);
+
+    const intx::uint256 kGoerliTTD{intx::from_string<intx::uint256>("10790000")};
+    CHECK(from_string_sci<intx::uint256>("1.079e+7") == kGoerliTTD);
+    CHECK(from_string_sci<intx::uint256>("10790000") == kGoerliTTD);
+
+    CHECK(from_string_sci<intx::uint256>("0") == intx::from_string<intx::uint256>("0"));
+    CHECK(from_string_sci<intx::uint256>("0e+0") == intx::from_string<intx::uint256>("0"));
+    CHECK(from_string_sci<intx::uint256>("0.0e+1") == intx::from_string<intx::uint256>("0"));
+    CHECK(from_string_sci<intx::uint256>("18") == intx::from_string<intx::uint256>("18"));
+    CHECK(from_string_sci<intx::uint256>("18e+0") == intx::from_string<intx::uint256>("18"));
+    CHECK(from_string_sci<intx::uint256>("18e+1") == intx::from_string<intx::uint256>("180"));
+    CHECK(from_string_sci<intx::uint256>("18.1e+1") == intx::from_string<intx::uint256>("181"));
+    CHECK(from_string_sci<intx::uint256>("18e+2") == intx::from_string<intx::uint256>("1800"));
+    CHECK(from_string_sci<intx::uint256>("18.1e+2") == intx::from_string<intx::uint256>("1810"));
+    CHECK(from_string_sci<intx::uint256>("18.12e+2") == intx::from_string<intx::uint256>("1812"));
+
+    const auto kMaxFixedDecimalNotation{"115792089237316195423570985008687907853269984665640564039457584007913129639935"};
+    CHECK(from_string_sci<intx::uint256>(kMaxFixedDecimalNotation) == std::numeric_limits<intx::uint256>::max());
+    const auto kMaxScientificNotation{"1.15792089237316195423570985008687907853269984665640564039457584007913129639935e+77"};
+    CHECK(from_string_sci<intx::uint256>(kMaxScientificNotation) == std::numeric_limits<intx::uint256>::max());
 }
 
 }  // namespace silkworm

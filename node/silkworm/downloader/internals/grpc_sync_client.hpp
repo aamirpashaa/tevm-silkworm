@@ -1,5 +1,5 @@
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_GRPC_SYNC_CLIENT_HPP
-#define SILKWORM_GRPC_SYNC_CLIENT_HPP
+#pragma once
 
 #include <chrono>
 #include <iostream>
@@ -119,6 +118,12 @@ class Client {
         call.execute(stub_.get());  // provide the stub to the call, it is the call that know what procedure to execute
     }
 
+    bool is_connected() {
+        bool try_to_connect = true;
+        grpc_connectivity_state state = channel_->GetState(try_to_connect);
+        return (state == GRPC_CHANNEL_READY);
+    }
+
   protected:
     std::shared_ptr<grpc::Channel> channel_;
     std::unique_ptr<typename STUB::Stub> stub_;  // the stub class generated from grpc proto
@@ -138,9 +143,9 @@ class UnaryCall : public Call<STUB> {
 
     UnaryCall(std::string name, procedure_t proc, request_t request)
         : base_t{std::move(name)}, procedure_{proc}, request_{std::move(request)} {
-        context_.set_wait_for_ready(true); // not fail if the channel is in TRANSIENT_FAILURE, instead queue the RPCs
-                                           // until the channel is READY.
-    }                                      // When channel is in CONNECTING, READY, or IDLE it doesn't fail anyway
+        context_.set_wait_for_ready(true);  // not fail if the channel is in TRANSIENT_FAILURE, instead queue the RPCs
+                                            // until the channel is READY.
+    }                                       // When channel is in CONNECTING, READY, or IDLE it doesn't fail anyway
 
     void deadline(time_point_t tp) { context_.set_deadline(tp); }
     void do_not_throw_on_failure() { not_throw_on_failure_ = true; }
@@ -242,5 +247,3 @@ class OutStreamingCall : public Call<STUB> {
 };
 
 }  // namespace silkworm::rpc
-
-#endif  // SILKWORM_GRPC_SYNC_CLIENT_HPP

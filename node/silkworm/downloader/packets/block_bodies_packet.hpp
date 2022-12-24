@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_BLOCK_BODIES_PACKET_HPP
-#define SILKWORM_BLOCK_BODIES_PACKET_HPP
+#pragma once
 
 #include <silkworm/downloader/internals/types.hpp>
 
@@ -29,9 +28,6 @@ struct BlockBodiesPacket66 {  // eth/66 version
 };
 
 namespace rlp {
-
-    template <>
-    DecodingResult decode(ByteView& from, BlockBodiesPacket& to) noexcept;
 
     size_t length(const BlockBodiesPacket66& from) noexcept;
 
@@ -49,5 +45,3 @@ inline std::ostream& operator<<(std::ostream& os, const BlockBodiesPacket66& pac
 }
 
 }  // namespace silkworm
-
-#endif  // SILKWORM_BLOCK_BODIES_PACKET_HPP

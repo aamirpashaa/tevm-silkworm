@@ -1,5 +1,5 @@
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_HASH_OR_NUMBER_HPP
-#define SILKWORM_HASH_OR_NUMBER_HPP
+#pragma once
 
 #include <variant>
 
@@ -77,4 +76,3 @@ inline std::ostream& operator<<(std::ostream& os, const HashOrNumber& packet) {
 }
 
 }  // namespace silkworm
-#endif  // SILKWORM_HASH_OR_NUMBER_HPP

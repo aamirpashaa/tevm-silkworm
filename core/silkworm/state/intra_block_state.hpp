@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_STATE_INTRA_BLOCK_STATE_HPP_
-#define SILKWORM_STATE_INTRA_BLOCK_STATE_HPP_
+#pragma once
 
 #include <memory>
 #include <vector>
@@ -45,7 +44,6 @@ class IntraBlockState {
 
         size_t journal_size_{0};
         size_t log_size_{0};
-        uint64_t refund_{0};
     };
 
     IntraBlockState(const IntraBlockState&) = delete;
@@ -64,7 +62,7 @@ class IntraBlockState {
 
     void destruct(const evmc::address& address);
 
-    void record_suicide(const evmc::address& address) noexcept;
+    bool record_suicide(const evmc::address& address) noexcept;
     void destruct_suicides();
     void destruct_touched_dead();
 
@@ -110,11 +108,6 @@ class IntraBlockState {
     std::vector<Log>& logs() noexcept { return logs_; }
     const std::vector<Log>& logs() const noexcept { return logs_; }
 
-    void add_refund(uint64_t addend) noexcept;
-    void subtract_refund(uint64_t subtrahend) noexcept;
-
-    uint64_t get_refund() const noexcept { return refund_; }
-
     const FlatHashSet<evmc::address>& touched() const noexcept { return touched_; }
 
   private:
@@ -151,12 +144,9 @@ class IntraBlockState {
     FlatHashSet<evmc::address> self_destructs_;
     std::vector<Log> logs_;
     FlatHashSet<evmc::address> touched_;
-    uint64_t refund_{0};
     // EIP-2929 substate
     FlatHashSet<evmc::address> accessed_addresses_;
     FlatHashMap<evmc::address, FlatHashSet<evmc::bytes32>> accessed_storage_keys_;
 };
 
 }  // namespace silkworm
-
-#endif  // SILKWORM_STATE_INTRA_BLOCK_STATE_HPP_

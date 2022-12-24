@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -79,12 +79,6 @@ void ExecutionProcessor::execute_transaction(const Transaction& txn, Receipt& re
     assert(txn.from.has_value());
     state_.access_account(*txn.from);
 
-    const intx::uint256 base_fee_per_gas{evm_.block().header.base_fee_per_gas.value_or(0)};
-    const intx::uint256 effective_gas_price{txn.effective_gas_price(base_fee_per_gas)};
-    if (*txn.from != 0x0000000000000000000000000000000000000000_address) {
-        state_.subtract_from_balance(*txn.from, txn.gas_limit * effective_gas_price);
-    }
-
     if (txn.to.has_value()) {
         state_.access_account(*txn.to);
         // EVM itself increments the nonce for contract creation
@@ -101,13 +95,23 @@ void ExecutionProcessor::execute_transaction(const Transaction& txn, Receipt& re
     }
 
     const evmc_revision rev{evm_.revision()};
+    if (rev >= EVMC_SHANGHAI) {
+        // EIP-3651: Warm COINBASE
+        state_.access_account(evm_.beneficiary);
+    }
 
-    const intx::uint128 g0{intrinsic_gas(txn, rev >= EVMC_HOMESTEAD, rev >= EVMC_ISTANBUL)};
+    const intx::uint256 base_fee_per_gas{evm_.block().header.base_fee_per_gas.value_or(0)};
+    const intx::uint256 effective_gas_price{txn.effective_gas_price(base_fee_per_gas)};
+    if (*txn.from != 0x0000000000000000000000000000000000000000_address) {
+        state_.subtract_from_balance(*txn.from, txn.gas_limit * effective_gas_price);
+    }
+
+    const intx::uint128 g0{intrinsic_gas(txn, rev)};
     assert(g0 <= UINT64_MAX);  // true due to the precondition (transaction must be valid)
 
     const CallResult vm_res{evm_.execute(txn, txn.gas_limit - static_cast<uint64_t>(g0))};
 
-    const uint64_t gas_used{txn.gas_limit - refund_gas(txn, vm_res.gas_left)};
+    const uint64_t gas_used{txn.gas_limit - refund_gas(txn, vm_res.gas_left, vm_res.gas_refund)};
 
     // award the fee recipient
     const intx::uint256 priority_fee_per_gas{txn.priority_fee_per_gas(base_fee_per_gas)};
@@ -133,16 +137,13 @@ uint64_t ExecutionProcessor::available_gas() const noexcept {
     return evm_.block().header.gas_limit - cumulative_gas_used_;
 }
 
-uint64_t ExecutionProcessor::refund_gas(const Transaction& txn, uint64_t gas_left) noexcept {
+uint64_t ExecutionProcessor::refund_gas(const Transaction& txn, uint64_t gas_left, uint64_t gas_refund) noexcept {
     const evmc_revision rev{evm_.revision()};
-    uint64_t refund{state_.get_refund()};
-    if (rev < EVMC_LONDON) {
-        refund += fee::kRSelfDestruct * state_.number_of_self_destructs();
-    }
+
     const uint64_t max_refund_quotient{rev >= EVMC_LONDON ? param::kMaxRefundQuotientLondon
                                                           : param::kMaxRefundQuotientFrontier};
     const uint64_t max_refund{(txn.gas_limit - gas_left) / max_refund_quotient};
-    refund = std::min(refund, max_refund);
+    uint64_t refund = std::min(gas_refund, max_refund);
     gas_left += refund;
 
     const intx::uint256 base_fee_per_gas{evm_.block().header.base_fee_per_gas.value_or(0)};

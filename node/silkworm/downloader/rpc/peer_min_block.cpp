@@ -1,5 +1,5 @@
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@
 
 namespace silkworm::rpc {
 
-PeerMinBlock::PeerMinBlock(const std::string& peerId, BlockNum minBlock)
+PeerMinBlock::PeerMinBlock(const PeerId& peerId, BlockNum minBlock)
     : UnaryCall("PeerMinBlock", &sentry::Sentry::Stub::PeerMinBlock, {}) {
     request_.set_allocated_peer_id(to_H512(peerId).release());
     request_.set_min_block(minBlock);  // take ownership

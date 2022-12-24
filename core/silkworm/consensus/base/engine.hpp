@@ -1,22 +1,20 @@
 /*
-    Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+       http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
 */
 
 #pragma once
-#ifndef SILKWORM_CONSENSUS_BASE_ENGINE_HPP_
-#define SILKWORM_CONSENSUS_BASE_ENGINE_HPP_
 
 #include <silkworm/consensus/engine.hpp>
 
@@ -27,12 +25,12 @@ class EngineBase : public IEngine {
     explicit EngineBase(const ChainConfig& chain_config, bool prohibit_ommers)
         : chain_config_{chain_config}, prohibit_ommers_{prohibit_ommers} {}
 
-    //! \brief Performs validation of block header & body that can be done prior to sender recovery and execution.
-    //! \brief See [YP] Sections 4.3.2 "Holistic Validity", 4.3.4 "Block Header Validity", and 11.1 "Ommer Validation".
+    //! \brief Performs validation of block body that can be done prior to sender recovery and execution.
+    //! \brief See [YP] Sections 4.3.2 "Holistic Validity" and 11.1 "Ommer Validation".
     //! \param [in] block: block to pre-validate.
     //! \param [in] state: current state.
     //! \note Shouldn't be used for genesis block.
-    ValidationResult pre_validate_block(const Block& block, const BlockState& state) override;
+    ValidationResult pre_validate_block_body(const Block& block, const BlockState& state) override;
 
     //! \brief See [YP] Section 4.3.4 "Block Header Validity".
     //! \param [in] header: header to validate.
@@ -78,5 +76,3 @@ class EngineBase : public IEngine {
 };
 
 }  // namespace silkworm::consensus
-
-#endif  // SILKWORM_CONSENSUS_BASE_ENGINE_HPP_

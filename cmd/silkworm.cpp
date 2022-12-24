@@ -1,74 +1,36 @@
 /*
-    Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+       http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
 */
-
-#include <optional>
-#include <regex>
 
 #include <CLI/CLI.hpp>
 
+#include <silkworm/backend/backend_kv_server.hpp>
 #include <silkworm/buildinfo.h>
 #include <silkworm/common/log.hpp>
+#include <silkworm/common/mem_usage.hpp>
 #include <silkworm/common/settings.hpp>
 #include <silkworm/common/stopwatch.hpp>
 #include <silkworm/concurrency/signal_handler.hpp>
 #include <silkworm/db/stages.hpp>
+#include <silkworm/downloader/block_exchange.hpp>
+#include <silkworm/downloader/sentry_client.hpp>
 #include <silkworm/stagedsync/sync_loop.hpp>
 
 #include "common.hpp"
 
-#if defined(_WIN32)
-#include <Psapi.h>
-#endif
-
-#if defined(__linux__)
-#include <fstream>
-#include <regex>
-#endif
-
 using namespace silkworm;
-
-size_t get_mem_usage() {
-    size_t ret{0};
-#if defined(_WIN32)
-
-    static HANDLE phandle{GetCurrentProcess()};
-    PROCESS_MEMORY_COUNTERS_EX pmc;
-    (void)K32GetProcessMemoryInfo(phandle, (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc));
-    ret = pmc.WorkingSetSize;
-
-#endif
-
-#if defined(__linux__)
-
-    static const std::regex pattern{R"(^VmRSS:\s*(\d*)\s*kB$)", std::regex_constants::icase};
-    std::smatch matches;
-    std::string line;
-    std::ifstream input("/proc/self/status");
-    while (std::getline(input, line)) {
-        if (std::regex_search(line, matches, pattern, std::regex_constants::match_default)) {
-            std::string int_part = matches[1].str();
-            auto value{std::strtoull(int_part.c_str(), nullptr, 10)};
-            ret = value * 1_Kibi;
-            break;
-        }
-    }
-
-#endif
-    return ret;
-}
 
 int main(int argc, char* argv[]) {
     using namespace boost::placeholders;
@@ -77,26 +39,35 @@ int main(int argc, char* argv[]) {
     cli.get_formatter()->column_width(50);
 
     try {
-        log::Settings log_settings{};  // Holds logging settings
-        NodeSettings node_settings{};  // Holds node settings
+        cmd::SilkwormCoreSettings settings;
+        cmd::parse_silkworm_command_line(cli, argc, argv, settings);
 
-        cmd::parse_silkworm_command_line(cli, argc, argv, log_settings, node_settings);
+        auto& node_settings = settings.node_settings;
 
-        SignalHandler::init();    // Trap OS signals
-        log::init(log_settings);  // Initialize logging with cli settings
+        // Trap OS signals
+        SignalHandler::init();
+
+        // Initialize logging with cli settings
+        log::init(settings.log_settings);
         log::set_thread_name("main");
 
         // Output BuildInfo
-        auto build_info{silkworm_get_buildinfo()};
+        const auto build_info{silkworm_get_buildinfo()};
+        node_settings.build_info =
+            "version=" + std::string(build_info->git_branch) + std::string(build_info->project_version) +
+            "build=" + std::string(build_info->system_name) + "-" + std::string(build_info->system_processor) +
+            " " + std::string(build_info->build_type) +
+            "compiler=" + std::string(build_info->compiler_id) +
+            " " + std::string(build_info->compiler_version);
+
         log::Message(
             "Silkworm",
-            {
-                "version", std::string(build_info->git_branch) + std::string(build_info->project_version),  //
-                "build",
-                std::string(build_info->system_name) + "-" + std::string(build_info->system_processor) + " " +
-                    std::string(build_info->build_type),                                                            //
-                "compiler", std::string(build_info->compiler_id) + " " + std::string(build_info->compiler_version)  //
-            });
+            {"version", std::string(build_info->git_branch) + std::string(build_info->project_version),
+             "build",
+             std::string(build_info->system_name) + "-" + std::string(build_info->system_processor) + " " +
+                 std::string(build_info->build_type),
+             "compiler",
+             std::string(build_info->compiler_id) + " " + std::string(build_info->compiler_version)});
 
         // Output mdbx build info
         auto mdbx_ver{mdbx::get_version()};
@@ -107,7 +78,7 @@ int main(int argc, char* argv[]) {
         // Check db
         cmd::run_preflight_checklist(node_settings);  // Prepare database for takeoff
 
-        auto chaindata_env{silkworm::db::open_env(node_settings.chaindata_env_config)};
+        auto chaindata_db{silkworm::db::open_env(node_settings.chaindata_env_config)};
 
         // Start boost asio
         using asio_guard_type = boost::asio::executor_work_guard<boost::asio::io_context::executor_type>;
@@ -119,9 +90,27 @@ int main(int argc, char* argv[]) {
             log::Trace("Boost Asio", {"state", "stopped"});
         }};
 
+        // BackEnd & KV server
+        const auto node_name{silkworm::cmd::get_node_name_from_build_info(build_info)};
+        silkworm::EthereumBackEnd backend{node_settings, &chaindata_db};
+        backend.set_node_name(node_name);
+
+        silkworm::rpc::BackEndKvServer rpc_server{settings.server_settings, backend};
+        rpc_server.build_and_start();
+
+        // Sentry client - connects to sentry
+        SentryClient sentry{node_settings.external_sentry_addr, db::ROAccess{chaindata_db},
+                            node_settings.chain_config.value()};
+        auto message_receiving = std::thread([&sentry]() { sentry.execution_loop(); });
+        auto stats_receiving = std::thread([&sentry]() { sentry.stats_receiving_loop(); });
+
+        // BlockExchange - download headers and bodies from remote peers using the sentry
+        BlockExchange block_exchange{sentry, db::ROAccess{chaindata_db}, node_settings.chain_config.value()};
+        auto block_downloading = std::thread([&block_exchange]() { block_exchange.execution_loop(); });
+
         // Start sync loop
         auto start_time{std::chrono::steady_clock::now()};
-        stagedsync::SyncLoop sync_loop(&node_settings, &chaindata_env);
+        stagedsync::SyncLoop sync_loop(&node_settings, &chaindata_db, block_exchange);
         sync_loop.start(/*wait=*/false);
 
         // Keep waiting till sync_loop stops
@@ -137,24 +126,33 @@ int main(int argc, char* argv[]) {
             }
 
             auto t2{std::chrono::steady_clock::now()};
-            if ((t2 - t1) > std::chrono::seconds(300)) {
+            if ((t2 - t1) > std::chrono::seconds(60)) {
                 t1 = std::chrono::steady_clock::now();
                 auto total_duration{t1 - start_time};
                 log::Info("Resource usage",
-                          {
-                              "mem", human_size(get_mem_usage()),                                     //
-                              "chain", human_size(node_settings.data_directory->chaindata().size()),  //
-                              "etl-tmp", human_size(node_settings.data_directory->etl().size()),      //
-                              "uptime", StopWatch::format(total_duration)                             //
-                          });
+                          {"mem", human_size(get_mem_usage()),
+                           "chain", human_size(node_settings.data_directory->chaindata().size()),
+                           "etl-tmp", human_size(node_settings.data_directory->etl().size()),
+                           "uptime", StopWatch::format(total_duration)});
             }
         }
+
+        backend.close();
+        rpc_server.shutdown();
+        rpc_server.join();
+
+        block_exchange.stop();
+        sentry.stop();
+        block_downloading.join();
+        message_receiving.join();
+        stats_receiving.join();
 
         asio_guard.reset();
         asio_thread.join();
 
-        log::Message() << "Closing Database chaindata path " << node_settings.data_directory->chaindata().path();
-        chaindata_env.close();
+        log::Message() << "Closing database chaindata path: " << node_settings.data_directory->chaindata().path();
+        chaindata_db.close();
+        log::Message() << "Database closed";
         sync_loop.rethrow();  // Eventually throws the exception which caused the stop
         return 0;
 
@@ -164,13 +162,16 @@ int main(int argc, char* argv[]) {
         log::Error() << ex.what();
         return -1;
     } catch (const std::invalid_argument& ex) {
-        std::cerr << "\tInvalid argument :" << ex.what() << "\n" << std::endl;
+        std::cerr << "\tInvalid argument :" << ex.what() << "\n"
+                  << std::endl;
         return -3;
     } catch (const std::exception& ex) {
-        std::cerr << "\tUnexpected error : " << ex.what() << "\n" << std::endl;
+        std::cerr << "\tUnexpected error : " << ex.what() << "\n"
+                  << std::endl;
         return -4;
     } catch (...) {
-        std::cerr << "\tUnexpected undefined error\n" << std::endl;
+        std::cerr << "\tUnexpected undefined error\n"
+                  << std::endl;
         return -99;
     }
 }

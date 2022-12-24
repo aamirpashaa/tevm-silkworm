@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -45,7 +45,7 @@ static std::vector<T> decode_vector_success(std::string_view hex) {
     Bytes bytes{*from_hex(hex)};
     ByteView view{bytes};
     std::vector<T> res;
-    REQUIRE(decode_vector<T>(view, res) == DecodingResult::kOk);
+    REQUIRE(decode<T>(view, res) == DecodingResult::kOk);
     CHECK(view.empty());  // check that the entire input was consumed
     return res;
 }

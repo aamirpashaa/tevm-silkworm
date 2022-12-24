@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -16,9 +16,12 @@
 
 #include "engine.hpp"
 
+#include <utility>
+
 #include <silkpre/secp256k1n.hpp>
 
 #include <silkworm/chain/intrinsic_gas.hpp>
+#include <silkworm/chain/protocol_param.hpp>
 #include <silkworm/consensus/ethash/engine.hpp>
 #include <silkworm/consensus/merge/engine.hpp>
 #include <silkworm/consensus/noproof/engine.hpp>
@@ -64,7 +67,7 @@ ValidationResult pre_validate_transaction(const Transaction& txn, uint64_t block
         }
     }
 
-    const intx::uint128 g0{intrinsic_gas(txn, rev >= EVMC_HOMESTEAD, rev >= EVMC_ISTANBUL)};
+    const intx::uint128 g0{intrinsic_gas(txn, rev)};
     if (txn.gas_limit < g0) {
         return ValidationResult::kIntrinsicGas;
     }
@@ -74,22 +77,35 @@ ValidationResult pre_validate_transaction(const Transaction& txn, uint64_t block
         return ValidationResult::kNonceTooHigh;
     }
 
+    // EIP-3860: Limit and meter initcode
+    const bool contract_creation{!txn.to};
+    if (rev >= EVMC_SHANGHAI && contract_creation && txn.data.size() > param::kMaxInitCodeSize) {
+        return ValidationResult::kMaxInitCodeSizeExceeded;
+    }
+
     return ValidationResult::kOk;
 }
 
-std::unique_ptr<IEngine> engine_factory(const ChainConfig& chain_config) {
-    if (chain_config.terminal_total_difficulty.has_value()) {
-        return std::make_unique<MergeEngine>(chain_config);
-    }
-
+static std::unique_ptr<IEngine> pre_merge_engine(const ChainConfig& chain_config) {
     switch (chain_config.seal_engine) {
         case SealEngineType::kEthash:
             return std::make_unique<EthashEngine>(chain_config);
         case SealEngineType::kNoProof:
             return std::make_unique<NoProofEngine>(chain_config);
         default:
-            return {};
+            return nullptr;
     }
+}
+
+std::unique_ptr<IEngine> engine_factory(const ChainConfig& chain_config) {
+    std::unique_ptr<IEngine> engine{pre_merge_engine(chain_config)};
+    if (!engine) return nullptr;
+
+    if (chain_config.terminal_total_difficulty.has_value()) {
+        engine = std::make_unique<MergeEngine>(std::move(engine), chain_config);
+    }
+
+    return engine;
 }
 
 }  // namespace silkworm::consensus

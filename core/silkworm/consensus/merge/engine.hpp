@@ -1,23 +1,23 @@
 /*
-    Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+       http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
 */
 
-#ifndef SILKWORM_CONSENSUS_MERGE_ENGINE_HPP_
-#define SILKWORM_CONSENSUS_MERGE_ENGINE_HPP_
+#pragma once
 
-#include <silkworm/consensus/ethash/engine.hpp>
+#include <memory>
+
 #include <silkworm/consensus/pos/engine.hpp>
 
 namespace silkworm::consensus {
@@ -26,9 +26,9 @@ namespace silkworm::consensus {
 // See EIP-3675: Upgrade consensus to Proof-of-Stake.
 class MergeEngine : public IEngine {
   public:
-    explicit MergeEngine(const ChainConfig& chain_config);
+    explicit MergeEngine(std::unique_ptr<IEngine> pre_merge_engine, const ChainConfig& chain_config);
 
-    ValidationResult pre_validate_block(const Block& block, const BlockState& state) override;
+    ValidationResult pre_validate_block_body(const Block& block, const BlockState& state) override;
 
     ValidationResult validate_block_header(const BlockHeader& header, const BlockState& state,
                                            bool with_future_timestamp_check) override;
@@ -45,10 +45,8 @@ class MergeEngine : public IEngine {
     ValidationResult validate_ommers(const Block& block, const BlockState& state) override;
 
     intx::uint256 terminal_total_difficulty_;
-    EthashEngine ethash_engine_;
-    ProofOfStakeEngine pos_engine_;
+    std::unique_ptr<IEngine> pre_merge_engine_;
+    ProofOfStakeEngine post_merge_engine_;
 };
 
 }  // namespace silkworm::consensus
-
-#endif  // SILKWORM_CONSENSUS_MERGE_ENGINE_HPP_

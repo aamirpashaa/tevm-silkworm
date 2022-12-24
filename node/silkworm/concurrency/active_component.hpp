@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_CONCURRENCY_ACTIVE_COMPONENT_HPP_
-#define SILKWORM_CONCURRENCY_ACTIVE_COMPONENT_HPP_
+#pragma once
 
 #include <atomic>
 
@@ -36,5 +35,3 @@ class ActiveComponent : public Stoppable {
 };
 
 }  // namespace silkworm
-
-#endif  // SILKWORM_CONCURRENCY_ACTIVE_COMPONENT_HPP_

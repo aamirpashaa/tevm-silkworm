@@ -1,17 +1,17 @@
 /*
-    Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+       http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
 */
 
 #include "prune_mode.hpp"
@@ -105,18 +105,18 @@ BlockNum BlockAmount::value() const {
 }
 
 BlockNum BlockAmount::value_from_head(BlockNum stage_head) const {
-    if (!enabled_ || !value_) {
+    if (!stage_head || !enabled_ || !value_) {
         return 0;
     }
-    BlockNum tmpVal{value()};
-    if (tmpVal >= stage_head) {
-        return 0;
-    }
+
+    const BlockNum prune_value{value()};
     switch (type_) {
         case Type::kOlder:  // See Erigon prune mode Distance interface
-            return stage_head - tmpVal;
+            if (prune_value >= stage_head) return 0;
+            return stage_head - prune_value;
         case Type::kBefore:  // See Erigon prune mode Before interface
-            return tmpVal - 1;
+            if (!prune_value) return 0;
+            return prune_value - 1;
         default:
             return 0;  // Should not happen
     }

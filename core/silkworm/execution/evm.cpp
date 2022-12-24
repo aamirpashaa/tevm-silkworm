@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -77,27 +77,26 @@ CallResult EVM::execute(const Transaction& txn, uint64_t gas) noexcept {
     const bool contract_creation{!txn.to.has_value()};
     const evmc::address destination{contract_creation ? evmc::address{} : *txn.to};
 
-    evmc_message message{
-        contract_creation ? EVMC_CREATE : EVMC_CALL,  // kind
-        0,                                            // flags
-        0,                                            // depth
-        static_cast<int64_t>(gas),                    // gas
-        destination,                                  // recipient
-        *txn.from,                                    // sender
-        &txn.data[0],                                 // input_data
-        txn.data.size(),                              // input_size
-        intx::be::store<evmc::uint256be>(txn.value),  // value
-        {},                                           // create2_salt
-        destination,                                  // code_address
+    const evmc_message message{
+        .kind = contract_creation ? EVMC_CREATE : EVMC_CALL,
+        .gas = static_cast<int64_t>(gas),
+        .recipient = destination,
+        .sender = *txn.from,
+        .input_data = txn.data.data(),
+        .input_size = txn.data.size(),
+        .value = intx::be::store<evmc::uint256be>(txn.value),
+        .code_address = destination,
     };
 
-    evmc::result res{contract_creation ? create(message) : call(message)};
+    evmc::Result res{contract_creation ? create(message) : call(message)};
 
-    return {res.status_code, static_cast<uint64_t>(res.gas_left), {res.output_data, res.output_size}};
+    const auto gas_left = static_cast<uint64_t>(res.gas_left);
+    const auto gas_refund = static_cast<uint64_t>(res.gas_refund);
+    return {res.status_code, gas_left, gas_refund, {res.output_data, res.output_size}};
 }
 
-evmc::result EVM::create(const evmc_message& message) noexcept {
-    evmc::result res{EVMC_SUCCESS, message.gas, nullptr, 0};
+evmc::Result EVM::create(const evmc_message& message) noexcept {
+    evmc::Result res{EVMC_SUCCESS, message.gas, 0};
 
     auto value{intx::be::load<intx::uint256>(message.value)};
     if (state_.get_balance(message.sender) < value && message.sender != 0x0000000000000000000000000000000000000000_address) {
@@ -149,57 +148,59 @@ evmc::result EVM::create(const evmc_message& message) noexcept {
     }
 
     const evmc_message deploy_message{
-        EVMC_CALL,       // kind
-        0,               // flags
-        message.depth,   // depth
-        message.gas,     // gas
-        contract_addr,   // recipient
-        message.sender,  // sender
-        nullptr,         // input_data
-        0,               // input_size
-        message.value,   // value
+        .kind = EVMC_CALL,
+        .depth = message.depth,
+        .gas = message.gas,
+        .recipient = contract_addr,
+        .sender = message.sender,
+        .value = message.value,
     };
 
-    res =
-        evmc::result{execute(deploy_message, ByteView{message.input_data, message.input_size}, /*code_hash=*/nullptr)};
+    auto evm_res{execute(deploy_message, ByteView{message.input_data, message.input_size}, /*code_hash=*/nullptr)};
 
-    if (res.status_code == EVMC_SUCCESS) {
-        const size_t code_len{res.output_size};
+    if (evm_res.status_code == EVMC_SUCCESS) {
+        const size_t code_len{evm_res.output_size};
         const uint64_t code_deploy_gas{code_len * fee::kGCodeDeposit};
 
-        if (rev >= EVMC_LONDON && code_len > 0 && res.output_data[0] == 0xEF) {
+        if (rev >= EVMC_LONDON && code_len > 0 && evm_res.output_data[0] == 0xEF) {
             // https://eips.ethereum.org/EIPS/eip-3541
-            res.status_code = EVMC_CONTRACT_VALIDATION_FAILURE;
+            evm_res.status_code = EVMC_CONTRACT_VALIDATION_FAILURE;
         } else if (rev >= EVMC_SPURIOUS_DRAGON && code_len > param::kMaxCodeSize) {
             // https://eips.ethereum.org/EIPS/eip-170
-            res.status_code = EVMC_OUT_OF_GAS;
-        } else if (res.gas_left >= 0 && static_cast<uint64_t>(res.gas_left) >= code_deploy_gas) {
-            res.gas_left -= static_cast<int64_t>(code_deploy_gas);
-            state_.set_code(contract_addr, {res.output_data, res.output_size});
+            evm_res.status_code = EVMC_OUT_OF_GAS;
+        } else if (evm_res.gas_left >= 0 && static_cast<uint64_t>(evm_res.gas_left) >= code_deploy_gas) {
+            evm_res.gas_left -= static_cast<int64_t>(code_deploy_gas);
+            state_.set_code(contract_addr, {evm_res.output_data, evm_res.output_size});
         } else if (rev >= EVMC_HOMESTEAD) {
-            res.status_code = EVMC_OUT_OF_GAS;
+            evm_res.status_code = EVMC_OUT_OF_GAS;
         }
     }
 
-    if (res.status_code == EVMC_SUCCESS) {
-        res.create_address = contract_addr;
+    if (evm_res.status_code == EVMC_SUCCESS) {
+        evm_res.create_address = contract_addr;
     } else {
         state_.revert_to_snapshot(snapshot);
-        if (res.status_code != EVMC_REVERT) {
-            res.gas_left = 0;
+        evm_res.gas_refund = 0;
+        if (evm_res.status_code != EVMC_REVERT) {
+            evm_res.gas_left = 0;
         }
     }
 
-    return res;
+    // Explicitly notify registered tracers (if any) because evmc_result has been changed post execute
+    for (auto tracer : tracers_) {
+        tracer.get().on_creation_completed(evm_res, state_);
+    }
+
+    return evmc::Result{evm_res};
 }
 
-evmc::result EVM::call(const evmc_message& message) noexcept {
-    evmc_result res{evmc_make_result(EVMC_SUCCESS, message.gas, nullptr, 0)};
+evmc::Result EVM::call(const evmc_message& message) noexcept {
+    evmc_result res{evmc_make_result(EVMC_SUCCESS, message.gas, 0, nullptr, 0)};
 
     const auto value{intx::be::load<intx::uint256>(message.value)};
     if (message.kind != EVMC_DELEGATECALL && state_.get_balance(message.sender) < value && message.sender != 0x0000000000000000000000000000000000000000_address) {
         res.status_code = EVMC_INSUFFICIENT_BALANCE;
-        return evmc::result{res};
+        return evmc::Result{res};
     }
 
     const auto snapshot{state_.take_snapshot()};
@@ -238,15 +239,13 @@ evmc::result EVM::call(const evmc_message& message) noexcept {
             }
         }
         // Explicitly notify registered tracers (if any)
-        if (!tracers_.empty()) {
-            for (auto tracer : tracers_) {
-                tracer.get().on_precompiled_run(evmc::result{res}, message.gas, state_);
-            }
+        for (auto tracer : tracers_) {
+            tracer.get().on_precompiled_run(res, message.gas, state_);
         }
     } else {
         const ByteView code{state_.get_code(message.code_address)};
         if (code.empty() && tracers_.empty()) {  // Do not skip execution if there are any tracers
-            return evmc::result{res};
+            return evmc::Result{res};
         }
 
         const evmc::bytes32 code_hash{state_.get_code_hash(message.code_address)};
@@ -255,12 +254,13 @@ evmc::result EVM::call(const evmc_message& message) noexcept {
 
     if (res.status_code != EVMC_SUCCESS) {
         state_.revert_to_snapshot(snapshot);
+        res.gas_refund = 0;
         if (res.status_code != EVMC_REVERT) {
             res.gas_left = 0;
         }
     }
 
-    return evmc::result{res};
+    return evmc::Result{res};
 }
 
 evmc_result EVM::execute(const evmc_message& msg, ByteView code, const evmc::bytes32* code_hash) noexcept {
@@ -277,7 +277,7 @@ evmc_result EVM::execute(const evmc_message& msg, ByteView code, const evmc::byt
     }
 }
 
-gsl::owner<EvmoneExecutionState*> EVM::acquire_state() noexcept {
+gsl::owner<EvmoneExecutionState*> EVM::acquire_state() const noexcept {
     gsl::owner<EvmoneExecutionState*> state{nullptr};
     if (state_pool) {
         state = state_pool->acquire();
@@ -288,7 +288,7 @@ gsl::owner<EvmoneExecutionState*> EVM::acquire_state() noexcept {
     return state;
 }
 
-void EVM::release_state(gsl::owner<EvmoneExecutionState*> state) noexcept {
+void EVM::release_state(gsl::owner<EvmoneExecutionState*> state) const noexcept {
     if (state_pool) {
         state_pool->add(state);
     } else {
@@ -307,7 +307,7 @@ evmc_result EVM::execute_with_baseline_interpreter(evmc_revision rev, const evmc
         }
     }
     if (!analysis) {
-        analysis = std::make_shared<evmone::baseline::CodeAnalysis>(evmone::baseline::analyze(code));
+        analysis = std::make_shared<evmone::baseline::CodeAnalysis>(evmone::baseline::analyze(rev, code));
         if (use_cache) {
             baseline_analysis_cache->put(*code_hash, analysis);
         }
@@ -407,74 +407,50 @@ evmc_storage_status EvmHost::set_storage(const evmc::address& address, const evm
     const evmc::bytes32 current_val{evm_.state().get_current_storage(address, key)};
 
     if (current_val == new_val) {
-        return EVMC_STORAGE_UNCHANGED;
+        return EVMC_STORAGE_ASSIGNED;
     }
 
     evm_.state().set_storage(address, key, new_val);
 
-    const evmc_revision rev{evm_.revision()};
-    const bool eip1283{rev >= EVMC_ISTANBUL || rev == EVMC_CONSTANTINOPLE};
-
-    if (!eip1283) {
-        if (is_zero(current_val)) {
-            return EVMC_STORAGE_ADDED;
-        }
-
-        if (is_zero(new_val)) {
-            evm_.state().add_refund(fee::kRSClear);
-            return EVMC_STORAGE_DELETED;
-        }
-
-        return EVMC_STORAGE_MODIFIED;
-    }
-
-    const uint64_t sload_cost{[rev]() {
-        if (rev >= EVMC_BERLIN) {
-            return fee::kWarmStorageReadCost;
-        } else if (rev >= EVMC_ISTANBUL) {
-            return fee::kGSLoadIstanbul;
-        } else {
-            return fee::kGSLoadTangerineWhistle;
-        }
-    }()};
-
-    uint64_t sstore_reset_gas{fee::kGSReset};
-    if (rev >= EVMC_BERLIN) {
-        sstore_reset_gas -= fee::kColdSloadCost;
-    }
-
     // https://eips.ethereum.org/EIPS/eip-1283
     const evmc::bytes32 original_val{evm_.state().get_original_storage(address, key)};
-
-    // https://eips.ethereum.org/EIPS/eip-3529
-    const uint64_t sstore_clears_refund{rev >= EVMC_LONDON ? sstore_reset_gas + fee::kAccessListStorageKeyCost
-                                                           : fee::kRSClear};
 
     if (original_val == current_val) {
         if (is_zero(original_val)) {
             return EVMC_STORAGE_ADDED;
         }
+        // !is_zero(original_val)
         if (is_zero(new_val)) {
-            evm_.state().add_refund(sstore_clears_refund);
+            return EVMC_STORAGE_DELETED;
+        } else {
+            return EVMC_STORAGE_MODIFIED;
         }
-        return EVMC_STORAGE_MODIFIED;
-    } else {
-        if (!is_zero(original_val)) {
-            if (is_zero(current_val)) {
-                evm_.state().subtract_refund(sstore_clears_refund);
-            }
-            if (is_zero(new_val)) {
-                evm_.state().add_refund(sstore_clears_refund);
-            }
-        }
-        if (original_val == new_val) {
-            if (is_zero(original_val)) {
-                evm_.state().add_refund(fee::kGSSet - sload_cost);
+    }
+    // original_val != current_val
+    if (!is_zero(original_val)) {
+        if (is_zero(current_val)) {
+            if (original_val == new_val) {
+                return EVMC_STORAGE_DELETED_RESTORED;
             } else {
-                evm_.state().add_refund(sstore_reset_gas - sload_cost);
+                return EVMC_STORAGE_DELETED_ADDED;
             }
         }
-        return EVMC_STORAGE_MODIFIED_AGAIN;
+        // !is_zero(current_val)
+        if (is_zero(new_val)) {
+            return EVMC_STORAGE_MODIFIED_DELETED;
+        }
+        // !is_zero(new_val)
+        if (original_val == new_val) {
+            return EVMC_STORAGE_MODIFIED_RESTORED;
+        } else {
+            return EVMC_STORAGE_ASSIGNED;
+        }
+    }
+    // is_zero(original_val)
+    if (original_val == new_val) {
+        return EVMC_STORAGE_ADDED_DELETED;
+    } else {
+        return EVMC_STORAGE_ASSIGNED;
     }
 }
 
@@ -508,22 +484,23 @@ size_t EvmHost::copy_code(const evmc::address& address, size_t code_offset, uint
     return n;
 }
 
-void EvmHost::selfdestruct(const evmc::address& address, const evmc::address& beneficiary) noexcept {
-    evm_.state().record_suicide(address);
+bool EvmHost::selfdestruct(const evmc::address& address, const evmc::address& beneficiary) noexcept {
+    const bool recorded{evm_.state().record_suicide(address)};
     evm_.state().add_to_balance(beneficiary, evm_.state().get_balance(address));
     evm_.state().set_balance(address, 0);
+    return recorded;
 }
 
-evmc::result EvmHost::call(const evmc_message& message) noexcept {
+evmc::Result EvmHost::call(const evmc_message& message) noexcept {
     if (message.kind == EVMC_CREATE || message.kind == EVMC_CREATE2) {
-        evmc::result res{evm_.create(message)};
+        evmc::Result res{evm_.create(message)};
 
         // https://eips.ethereum.org/EIPS/eip-211
         if (res.status_code == EVMC_REVERT) {
             // geth returns CREATE output only in case of REVERT
             return res;
         } else {
-            evmc::result res_with_no_output{res.status_code, res.gas_left, nullptr, 0};
+            evmc::Result res_with_no_output{res.status_code, res.gas_left, res.gas_refund};
             res_with_no_output.create_address = res.create_address;
             return res_with_no_output;
         }
@@ -534,7 +511,7 @@ evmc::result EvmHost::call(const evmc_message& message) noexcept {
 
 evmc_tx_context EvmHost::get_tx_context() const noexcept {
     const BlockHeader& header{evm_.block_.header};
-    evmc_tx_context context;
+    evmc_tx_context context{};
     const intx::uint256 base_fee_per_gas{header.base_fee_per_gas.value_or(0)};
     const intx::uint256 effective_gas_price{evm_.txn_->effective_gas_price(base_fee_per_gas)};
     intx::be::store(context.tx_gas_price.bytes, effective_gas_price);
@@ -547,11 +524,11 @@ evmc_tx_context EvmHost::get_tx_context() const noexcept {
     assert(header.gas_limit <= INT64_MAX);  // EIP-1985
     context.block_gas_limit = static_cast<int64_t>(header.gas_limit);
     if (header.difficulty != 0) {
-        intx::be::store(context.block_difficulty.bytes, header.difficulty);
+        intx::be::store(context.block_prev_randao.bytes, header.difficulty);
     } else {
         // EIP-4399: Supplant DIFFICULTY opcode with RANDOM
         // We use 0 header difficulty as the telltale of PoS blocks
-        std::memcpy(context.block_difficulty.bytes, header.mix_hash.bytes, kHashLength);
+        std::memcpy(context.block_prev_randao.bytes, header.mix_hash.bytes, kHashLength);
     }
     intx::be::store(context.chain_id.bytes, intx::uint256{evm_.config().chain_id});
     intx::be::store(context.block_base_fee.bytes, base_fee_per_gas);

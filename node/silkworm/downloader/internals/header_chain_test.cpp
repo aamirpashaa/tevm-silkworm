@@ -1,5 +1,5 @@
 /*
-   Copyright 2020-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
 */
 
 #include "header_chain.hpp"
-#include "silkworm/chain/identity.hpp"
 
 #include <algorithm>
 
@@ -33,12 +32,10 @@ class HeaderChain_ForTest : public HeaderChain {
     using HeaderChain::anchors_;
     using HeaderChain::find_anchor;
     using HeaderChain::generate_request_id;
+    using HeaderChain::HeaderChain;
     using HeaderChain::links_;
     using HeaderChain::pending_links;
     using HeaderChain::reduce_links_to;
-    using HeaderChain::HeaderChain;
-
-    HeaderChain_ForTest() : HeaderChain(consensus::engine_factory(ChainIdentity::mainnet.chain)) {}
 };
 
 // TESTs related to HeaderList::split_into_segments
@@ -51,7 +48,7 @@ TEST_CASE("HeaderList - split_into_segments - No headers") {
 
     auto [segments, penalty] = headerList->split_into_segments();
 
-    REQUIRE(segments.size() == 0);
+    REQUIRE(segments.empty());
     REQUIRE(penalty == Penalty::NoPenalty);
 }
 
@@ -80,7 +77,7 @@ TEST_CASE("HeaderList - split_into_segments - Single header repeated twice") {
 
     auto [segments, penalty] = headerList->split_into_segments();
 
-    REQUIRE(segments.size() == 0);
+    REQUIRE(segments.empty());
     REQUIRE(penalty == Penalty::DuplicateHeaderPenalty);
 }
 
@@ -127,7 +124,7 @@ TEST_CASE("HeaderList - split_into_segments - Two connected headers with wrong n
 
     auto [segments, penalty] = headerList->split_into_segments();
 
-    REQUIRE(segments.size() == 0);
+    REQUIRE(segments.empty());
     REQUIRE(penalty == Penalty::WrongChildBlockHeightPenalty);
 }
 
@@ -338,10 +335,13 @@ TEST_CASE("HeaderList - split_into_segments - Four headers connected") {
 TEST_CASE("HeaderChain - process_segment - (1) simple chain") {
     using namespace std;
 
-    HeaderChain_ForTest chain;
+    ChainConfig chain_config{kMainnetConfig};
+    chain_config.genesis_hash.emplace(kMainnetGenesisHash);
+
+    HeaderChain_ForTest chain(chain_config);
     chain.top_seen_block_height(1'000'000);
     auto request_id = chain.generate_request_id();
-    PeerId peer_id = "1";
+    PeerId peer_id{byte_ptr_cast("1")};
 
     std::array<BlockHeader, 10> headers;
 
@@ -416,7 +416,7 @@ TEST_CASE("HeaderChain - process_segment - (1) simple chain") {
         REQUIRE(anchor->links[0]->next[0]->next[0]->hash == headers[3].hash());
         REQUIRE(anchor->links[0]->next[0]->next[0]->next.size() == 1);
         REQUIRE(anchor->links[0]->next[0]->next[0]->next[0]->hash == headers[4].hash());
-        REQUIRE(anchor->links[0]->next[0]->next[0]->next[0]->next.size() == 0);
+        REQUIRE(anchor->links[0]->next[0]->next[0]->next[0]->next.empty());
     }
 
     /* chain status:
@@ -459,12 +459,12 @@ TEST_CASE("HeaderChain - process_segment - (1) simple chain") {
         REQUIRE(anchor1->links[0]->next[0]->next[0]->hash == headers[3].hash());
         REQUIRE(anchor1->links[0]->next[0]->next[0]->next.size() == 1);
         REQUIRE(anchor1->links[0]->next[0]->next[0]->next[0]->hash == headers[4].hash());
-        REQUIRE(anchor1->links[0]->next[0]->next[0]->next[0]->next.size() == 0);
+        REQUIRE(anchor1->links[0]->next[0]->next[0]->next[0]->next.empty());
 
         REQUIRE(anchor2->links[0]->hash == headers[8].hash());
         REQUIRE(anchor2->links[0]->next.size() == 1);
         REQUIRE(anchor2->links[0]->next[0]->hash == headers[9].hash());
-        REQUIRE(anchor2->links[0]->next[0]->next.size() == 0);
+        REQUIRE(anchor2->links[0]->next[0]->next.empty());
     }
 
     /* chain status:
@@ -563,10 +563,13 @@ TEST_CASE("HeaderChain - process_segment - (1) simple chain") {
 TEST_CASE("HeaderChain - process_segment - (2) extending down with 2 siblings") {
     using namespace std;
 
-    HeaderChain_ForTest chain;
+    ChainConfig chain_config{kMainnetConfig};
+    chain_config.genesis_hash.emplace(kMainnetGenesisHash);
+
+    HeaderChain_ForTest chain(chain_config);
     chain.top_seen_block_height(1'000'000);
     auto request_id = chain.generate_request_id();
-    PeerId peer_id = "1";
+    PeerId peer_id{byte_ptr_cast("1")};
 
     std::array<BlockHeader, 10> headers;
 
@@ -619,10 +622,13 @@ TEST_CASE("HeaderChain - process_segment - (2) extending down with 2 siblings") 
 TEST_CASE("HeaderChain - process_segment - (3) chain with branches") {
     using namespace std;
 
-    HeaderChain_ForTest chain;
+    ChainConfig chain_config{kMainnetConfig};
+    chain_config.genesis_hash.emplace(kMainnetGenesisHash);
+
+    HeaderChain_ForTest chain(chain_config);
     chain.top_seen_block_height(1'000'000);
     auto request_id = chain.generate_request_id();
-    PeerId peer_id = "1";
+    PeerId peer_id{byte_ptr_cast("1")};
 
     std::array<BlockHeader, 10> headers;
 
@@ -688,7 +694,7 @@ TEST_CASE("HeaderChain - process_segment - (3) chain with branches") {
 
         REQUIRE(anchor->links.size() == 1);
         REQUIRE(anchor->links[0]->hash == headers[1].hash());
-        REQUIRE(anchor->links[0]->next.size() == 0);
+        REQUIRE(anchor->links[0]->next.empty());
     }
 
     /* chain status:
@@ -832,10 +838,13 @@ TEST_CASE("HeaderChain - process_segment - (3) chain with branches") {
 TEST_CASE("HeaderChain - process_segment - (4) pre-verified hashes on canonical chain") {
     using namespace std;
 
-    HeaderChain_ForTest chain;
+    ChainConfig chain_config{kMainnetConfig};
+    chain_config.genesis_hash.emplace(kMainnetGenesisHash);
+
+    HeaderChain_ForTest chain(chain_config);
     chain.top_seen_block_height(1'000'000);
     auto request_id = chain.generate_request_id();
-    PeerId peer_id = "1";
+    PeerId peer_id{byte_ptr_cast("1")};
 
     std::array<BlockHeader, 10> headers;
 
@@ -904,7 +913,7 @@ TEST_CASE("HeaderChain - process_segment - (4) pre-verified hashes on canonical 
         REQUIRE(link != nullptr);
         REQUIRE(link->preverified == true);
     }
-    // non canonical headers must be non pre-verified
+    // non-canonical headers must be non pre-verified
     for (auto header : {&h3a, &h4a, &h6a, &h6b, &h7b}) {
         auto link = chain.links_[header->hash()];
         REQUIRE(link != nullptr);
@@ -920,10 +929,13 @@ TEST_CASE("HeaderChain - process_segment - (4) pre-verified hashes on canonical 
 TEST_CASE("HeaderChain - process_segment - (5) pre-verified hashes") {
     using namespace std;
 
-    HeaderChain_ForTest chain;
+    ChainConfig chain_config{kMainnetConfig};
+    chain_config.genesis_hash.emplace(kMainnetGenesisHash);
+
+    HeaderChain_ForTest chain(chain_config);
     chain.top_seen_block_height(1'000'000);
     auto request_id = chain.generate_request_id();
-    PeerId peer_id = "1";
+    PeerId peer_id{byte_ptr_cast("1")};
 
     std::array<BlockHeader, 7> headers;
 
@@ -959,7 +971,7 @@ TEST_CASE("HeaderChain - process_segment - (5) pre-verified hashes") {
      */
     INFO("extend down") {
         // adding two headers to extend down the anchor
-        chain.accept_headers({headers[5],headers[4]}, request_id, peer_id);
+        chain.accept_headers({headers[5], headers[4]}, request_id, peer_id);
 
         // check pre-verification propagation
         auto link5 = chain.links_[headers[5].hash()];
@@ -973,7 +985,7 @@ TEST_CASE("HeaderChain - process_segment - (5) pre-verified hashes") {
      */
     INFO("connect") {
         // adding two headers to extend down the anchor
-        chain.accept_headers({headers[2],headers[3]}, request_id, peer_id);
+        chain.accept_headers({headers[2], headers[3]}, request_id, peer_id);
 
         // check pre-verification propagation
         auto link1 = chain.links_[headers[1].hash()];
@@ -995,10 +1007,13 @@ TEST_CASE("HeaderChain - process_segment - (5) pre-verified hashes") {
 TEST_CASE("HeaderChain - process_segment - (5') pre-verified hashes with canonical chain change") {
     using namespace std;
 
-    HeaderChain_ForTest chain;
+    ChainConfig chain_config{kMainnetConfig};
+    chain_config.genesis_hash.emplace(kMainnetGenesisHash);
+
+    HeaderChain_ForTest chain(chain_config);
     chain.top_seen_block_height(1'000'000);
     auto request_id = chain.generate_request_id();
-    PeerId peer_id = "1";
+    PeerId peer_id{byte_ptr_cast("1")};
 
     std::array<BlockHeader, 6> a_headers;
 
@@ -1052,10 +1067,13 @@ TEST_CASE("HeaderChain - process_segment - (5') pre-verified hashes with canonic
 TEST_CASE("HeaderChain - process_segment - (6) (malicious) siblings") {
     using namespace std;
 
-    HeaderChain_ForTest chain;
+    ChainConfig chain_config{kMainnetConfig};
+    chain_config.genesis_hash.emplace(kMainnetGenesisHash);
+
+    HeaderChain_ForTest chain(chain_config);
     chain.top_seen_block_height(1'000'000);
     auto request_id = chain.generate_request_id();
-    PeerId peer_id = "1";
+    PeerId peer_id{byte_ptr_cast("1")};
 
     std::array<BlockHeader, 10> headers;
 
@@ -1087,7 +1105,7 @@ TEST_CASE("HeaderChain - process_segment - (6) (malicious) siblings") {
 
         REQUIRE(anchor->links.size() == 1);
         REQUIRE(anchor->links[0]->hash == headers[5].hash());
-        REQUIRE(anchor->links[0]->next.size() == 0);
+        REQUIRE(anchor->links[0]->next.empty());
     }
 
     /* chain:
@@ -1114,7 +1132,7 @@ TEST_CASE("HeaderChain - process_segment - (6) (malicious) siblings") {
         REQUIRE(anchor->links[0]->next[0]->hash == headers[4].hash());
         REQUIRE(anchor->links[0]->next[0]->next.size() == 1);
         REQUIRE(anchor->links[0]->next[0]->next[0]->hash == headers[5].hash());
-        REQUIRE(anchor->links[0]->next[0]->next[0]->next.size() == 0);
+        REQUIRE(anchor->links[0]->next[0]->next[0]->next.empty());
     }
 
     /* chain:
@@ -1147,7 +1165,7 @@ TEST_CASE("HeaderChain - process_segment - (6) (malicious) siblings") {
         REQUIRE(anchor->links[0]->next[0]->hash == headers[4].hash());
         REQUIRE(anchor->links[0]->next[0]->next.size() == 1);
         REQUIRE(anchor->links[0]->next[0]->next[0]->hash == headers[5].hash());
-        REQUIRE(anchor->links[0]->next[0]->next[0]->next.size() == 0);
+        REQUIRE(anchor->links[0]->next[0]->next[0]->next.empty());
 
         REQUIRE(anchor->links[1]->hash == h5p.hash());
     }
@@ -1187,10 +1205,13 @@ TEST_CASE("HeaderChain - process_segment - (6) (malicious) siblings") {
 TEST_CASE("HeaderChain - process_segment - (7) invalidating anchor") {
     using namespace std;
 
-    HeaderChain_ForTest chain;
+    ChainConfig chain_config{kMainnetConfig};
+    chain_config.genesis_hash.emplace(kMainnetGenesisHash);
+
+    HeaderChain_ForTest chain(chain_config);
     chain.top_seen_block_height(1'000'000);
     auto request_id = chain.generate_request_id();
-    PeerId peer_id = "1";
+    PeerId peer_id{byte_ptr_cast("1")};
 
     std::array<BlockHeader, 10> headers;
 
@@ -1243,9 +1264,9 @@ TEST_CASE("HeaderChain - process_segment - (7) invalidating anchor") {
         REQUIRE(packet == std::nullopt);
         REQUIRE(!penalizations.empty());
 
-        REQUIRE(chain.anchor_queue_.size() == 0);
-        REQUIRE(chain.anchors_.size() == 0);
-        REQUIRE(chain.links_.size() == 0);
+        REQUIRE(chain.anchor_queue_.empty());
+        REQUIRE(chain.anchors_.empty());
+        REQUIRE(chain.links_.empty());
     }
 
     INFO("new_anchor again") {
@@ -1269,17 +1290,20 @@ TEST_CASE("HeaderChain - process_segment - (7) invalidating anchor") {
         REQUIRE(anchor->links[0]->next[0]->hash == headers[4].hash());
         REQUIRE(anchor->links[0]->next[0]->next.size() == 1);
         REQUIRE(anchor->links[0]->next[0]->next[0]->hash == headers[5].hash());
-        REQUIRE(anchor->links[0]->next[0]->next[0]->next.size() == 0);
+        REQUIRE(anchor->links[0]->next[0]->next[0]->next.empty());
     }
 }
 
 TEST_CASE("HeaderChain - process_segment - (8) sibling with anchor invalidation and links reduction") {
     using namespace std;
 
-    HeaderChain_ForTest chain;
+    ChainConfig chain_config{kMainnetConfig};
+    chain_config.genesis_hash.emplace(kMainnetGenesisHash);
+
+    HeaderChain_ForTest chain(chain_config);
     chain.top_seen_block_height(1'000'000);
     auto request_id = chain.generate_request_id();
-    PeerId peer_id = "1";
+    PeerId peer_id{byte_ptr_cast("1")};
 
     std::array<BlockHeader, 10> headers;
 
@@ -1312,7 +1336,7 @@ TEST_CASE("HeaderChain - process_segment - (8) sibling with anchor invalidation 
 
         REQUIRE(anchor->links.size() == 1);
         REQUIRE(anchor->links[0]->hash == h5p.hash());
-        REQUIRE(anchor->links[0]->next.size() == 0);
+        REQUIRE(anchor->links[0]->next.empty());
     }
 
     INFO("a segment with a sibling") {
@@ -1335,7 +1359,7 @@ TEST_CASE("HeaderChain - process_segment - (8) sibling with anchor invalidation 
 
         REQUIRE(anchor1->links.size() == 1);
         REQUIRE(anchor1->links[0]->hash == h5p.hash());
-        REQUIRE(anchor1->links[0]->next.size() == 0);
+        REQUIRE(anchor1->links[0]->next.empty());
 
         auto link5b = chain.links_[h5p.hash()];
         REQUIRE(link5b != nullptr);
@@ -1354,7 +1378,7 @@ TEST_CASE("HeaderChain - process_segment - (8) sibling with anchor invalidation 
         REQUIRE(anchor2->links[0]->next[0]->hash == headers[4].hash());
         REQUIRE(anchor2->links[0]->next[0]->next.size() == 1);
         REQUIRE(anchor2->links[0]->next[0]->next[0]->hash == headers[5].hash());
-        REQUIRE(anchor2->links[0]->next[0]->next[0]->next.size() == 0);
+        REQUIRE(anchor2->links[0]->next[0]->next[0]->next.empty());
     }
 
     INFO("failed extending anchor") {
@@ -1380,7 +1404,7 @@ TEST_CASE("HeaderChain - process_segment - (8) sibling with anchor invalidation 
 
         REQUIRE(anchor1->links.size() == 1);
         REQUIRE(anchor1->links[0]->hash == h5p.hash());
-        REQUIRE(anchor1->links[0]->next.size() == 0);
+        REQUIRE(anchor1->links[0]->next.empty());
 
         auto link5b = chain.links_[h5p.hash()];
         REQUIRE(link5b != nullptr);
@@ -1399,7 +1423,7 @@ TEST_CASE("HeaderChain - process_segment - (8) sibling with anchor invalidation 
         REQUIRE(anchor2->links[0]->next[0]->hash == headers[4].hash());
         REQUIRE(anchor2->links[0]->next[0]->next.size() == 1);
         REQUIRE(anchor2->links[0]->next[0]->next[0]->hash == headers[5].hash());
-        REQUIRE(anchor2->links[0]->next[0]->next[0]->next.size() == 0);
+        REQUIRE(anchor2->links[0]->next[0]->next[0]->next.empty());
     }
 
     INFO("invalidating") {
@@ -1446,7 +1470,7 @@ TEST_CASE("HeaderChain - process_segment - (8) sibling with anchor invalidation 
         REQUIRE(anchor2->links[0]->next[0]->hash == headers[4].hash());
         REQUIRE(anchor2->links[0]->next[0]->next.size() == 1);
         REQUIRE(anchor2->links[0]->next[0]->next[0]->hash == headers[5].hash());
-        REQUIRE(anchor2->links[0]->next[0]->next[0]->next.size() == 0);
+        REQUIRE(anchor2->links[0]->next[0]->next[0]->next.empty());
     }
 
     INFO("reducing links") {
@@ -1476,7 +1500,7 @@ TEST_CASE("HeaderChain - process_segment - (8) sibling with anchor invalidation 
         REQUIRE(anchor->links[0]->next[0]->hash == headers[4].hash());
         REQUIRE(anchor->links[0]->next[0]->next.size() == 1);
         REQUIRE(anchor->links[0]->next[0]->next[0]->hash == headers[5].hash());
-        REQUIRE(anchor->links[0]->next[0]->next[0]->next.size() == 0);
+        REQUIRE(anchor->links[0]->next[0]->next[0]->next.empty());
 
         auto link4 = chain.links_[headers[4].hash()];
         auto [deepest_anchor, deepest_link] = chain.find_anchor(link4);

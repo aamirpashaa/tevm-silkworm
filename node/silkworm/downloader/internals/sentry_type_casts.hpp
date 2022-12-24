@@ -1,5 +1,5 @@
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,8 +14,7 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_SENTRY_TYPE_CASTS_HPP
-#define SILKWORM_SENTRY_TYPE_CASTS_HPP
+#pragma once
 
 #include <memory>
 
@@ -27,11 +26,10 @@ namespace silkworm {
 
 std::unique_ptr<types::H256> to_H256(const intx::uint256& orig);
 std::unique_ptr<types::H256> to_H256(const Hash& orig);
-std::unique_ptr<types::H512> to_H512(const std::string& orig);
+std::unique_ptr<types::H512> to_H512(const Bytes& orig);
 
 intx::uint256 uint256_from_H256(const types::H256& orig);
 Hash hash_from_H256(const types::H256& orig);
-std::string string_from_H512(const types::H512& orig);
+Bytes bytes_from_H512(const types::H512& orig);
 
 }  // namespace silkworm
-#endif  // SILKWORM_SENTRY_TYPE_CASTS_HPP

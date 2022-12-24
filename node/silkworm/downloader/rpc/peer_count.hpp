@@ -1,5 +1,5 @@
 /*
-   Copyright 2021 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,10 +14,11 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_PEER_COUNT_HPP
-#define SILKWORM_PEER_COUNT_HPP
+#pragma once
 
-#include <silkworm/downloader/sentry_client.hpp>
+#include <p2psentry/sentry.grpc.pb.h>
+
+#include <silkworm/downloader/internals/grpc_sync_client.hpp>
 
 namespace silkworm::rpc {
 
@@ -27,5 +28,3 @@ class PeerCount : public rpc::UnaryCall<sentry::Sentry, sentry::PeerCountRequest
 };
 
 }  // namespace silkworm::rpc
-
-#endif //SILKWORM_PEER_COUNT_HPP

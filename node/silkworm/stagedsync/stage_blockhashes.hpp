@@ -1,5 +1,5 @@
 /*
-   Copyright 2021-2022 The Silkworm Authors
+   Copyright 2022 The Silkworm Authors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -14,31 +14,32 @@
    limitations under the License.
 */
 
-#ifndef SILKWORM_STAGEDSYNC_STAGE_BLOCKHASHES_HPP_
-#define SILKWORM_STAGEDSYNC_STAGE_BLOCKHASHES_HPP_
+#pragma once
 
-#include <silkworm/stagedsync/common.hpp>
+#include <silkworm/stagedsync/stage.hpp>
 
 namespace silkworm::stagedsync {
 
-class BlockHashes final : public IStage {
+class BlockHashes final : public Stage {
   public:
-    explicit BlockHashes(NodeSettings* node_settings) : IStage(db::stages::kBlockHashesKey, node_settings){};
+    explicit BlockHashes(NodeSettings* node_settings, SyncContext* sync_context)
+        : Stage(sync_context, db::stages::kBlockHashesKey, node_settings){};
     ~BlockHashes() override = default;
 
-    StageResult forward(db::RWTxn& txn) final;
-    StageResult unwind(db::RWTxn& txn, BlockNum to) final;
-    StageResult prune(db::RWTxn& txn) final;
+    Stage::Result forward(db::RWTxn& txn) final;
+    Stage::Result unwind(db::RWTxn& txn) final;
+    Stage::Result prune(db::RWTxn& txn) final;
     std::vector<std::string> get_log_progress() final;
 
   private:
     std::unique_ptr<etl::Collector> collector_{nullptr};
 
     /* Stats */
-    uint16_t current_phase_{0};
-    BlockNum reached_block_num_{0};
+    std::atomic_uint32_t current_phase_{0};
+    std::atomic<BlockNum> reached_block_num_{0};
+
+    void collect_and_load(db::RWTxn& txn, const BlockNum from,
+                          const BlockNum to);  // Accrues canonical hashes in collector and loads them
 };
 
-} // namespace silkworm::stagedsync
-
-#endif  // SILKWORM_STAGEDSYNC_STAGE_BLOCKHASHES_HPP_
+}  // namespace silkworm::stagedsync

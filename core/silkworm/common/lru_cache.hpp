@@ -36,13 +36,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * Modified by Andrew Ashikhmin
  */
 
-#ifndef SILKWORM_COMMON_LRU_CACHE_HPP_
-#define SILKWORM_COMMON_LRU_CACHE_HPP_
+#pragma once
 
 #include <cstddef>
 #include <list>
-#include <unordered_map>
 #include <optional>
+#include <unordered_map>
 
 namespace silkworm {
 
@@ -114,5 +113,3 @@ class lru_cache {
 };
 
 }  // namespace silkworm
-
-#endif  // SILKWORM_COMMON_LRU_CACHE_HPP_
