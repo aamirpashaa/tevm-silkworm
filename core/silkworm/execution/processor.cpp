@@ -44,7 +44,7 @@ ValidationResult ExecutionProcessor::validate_transaction(const Transaction& txn
     }
 
     const uint64_t nonce{state_.get_nonce(*txn.from)};
-    if (nonce != txn.nonce && (txn.nonce - nonce) > 1) {
+    if (nonce != txn.nonce && !(nonce == 0 && txn.nonce == 1)) {
         std::cout<<txn.nonce<<" "<<nonce<<std::endl;
         return ValidationResult::kWrongNonce;
     }
@@ -82,7 +82,7 @@ void ExecutionProcessor::execute_transaction(const Transaction& txn, Receipt& re
     if (txn.to.has_value()) {
         state_.access_account(*txn.to);
         // EVM itself increments the nonce for contract creation
-        if (*txn.from != 0x0000000000000000000000000000000000000000_address) {
+        if (!(*txn.from == 0x0000000000000000000000000000000000000000_address || (*txn.to == 0x0000000000000000000000000000000000000000_address && txn.v() == intx::uint256{42}))) {
             state_.set_nonce(*txn.from, txn.nonce + 1);
         }
     }

@@ -111,9 +111,7 @@ evmc::Result EVM::create(const evmc_message& message) noexcept {
         res.status_code = EVMC_ARGUMENT_OUT_OF_RANGE;
         return res;
     }
-    if (message.sender != 0x0000000000000000000000000000000000000000_address) {
-        state_.set_nonce(message.sender, nonce + 1);
-    }
+    state_.set_nonce(message.sender, nonce + 1);
 
     evmc::address contract_addr{};
     if (message.kind == EVMC_CREATE) {

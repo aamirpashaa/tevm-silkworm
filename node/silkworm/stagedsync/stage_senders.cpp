@@ -525,7 +525,9 @@ void Senders::recover_batch(secp256k1_context* context, BlockNum from) {
             auto res = rlp::decode_transaction(view, txn, rlp::Eip2718Wrapping::kNone);
             if (res == DecodingResult::kOk || res == DecodingResult::kInvalidVInSignature) {
                 if (txn.v() != intx::uint256{42}) {
-                    const auto tx_hash{keccak256(package.rlp)};
+                    Bytes signed_rlp{};
+                    rlp::encode(signed_rlp, txn, /*for_signing=*/true, /*wrap_eip2718_into_string=*/false);
+                    const auto tx_hash{keccak256(signed_rlp)};
                     const bool ok = silkpre_recover_address(package.tx_from.bytes, tx_hash.bytes, package.tx_signature, package.odd_y_parity, context);
                     if (!ok) {
                         throw std::runtime_error("Unable to recover from address in block " + std::to_string(package.block_num));
