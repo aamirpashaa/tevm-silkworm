@@ -53,6 +53,8 @@ class ExecutionProcessor {
 
     EVM& evm() noexcept { return evm_; }
     const EVM& evm() const noexcept { return evm_; }
+    IntraBlockState& state() noexcept { return state_; }
+    const IntraBlockState& state() const noexcept { return state_; }
 
   private:
     /// Execute the block, but do not write to the DB yet.

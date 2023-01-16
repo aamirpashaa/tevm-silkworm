@@ -44,16 +44,20 @@ ValidationResult ExecutionProcessor::validate_transaction(const Transaction& txn
     }
 
     const uint64_t nonce{state_.get_nonce(*txn.from)};
-    if (nonce != txn.nonce && !(nonce == 0 && txn.nonce == 1)) {
-        std::cout<<txn.nonce<<" "<<nonce<<std::endl;
+    if (nonce != txn.nonce && !(nonce == 0 && txn.nonce == 1) && !(txn.nonce == 0)) {
+        std::cout<<to_hex(*txn.from.value().bytes)<<" "<<txn.nonce<<" "<<nonce<<std::endl;
         return ValidationResult::kWrongNonce;
     }
 
     // https://github.com/ethereum/EIPs/pull/3594
-    const intx::uint512 max_gas_cost{intx::umul(intx::uint256{txn.gas_limit}, txn.max_fee_per_gas)};
+    intx::uint256 charged_gas_price = txn.max_fee_per_gas; 
+    if (txn.max_fee_per_gas > 499809179185) {
+        charged_gas_price = intx::uint256{499809179185};
+    }
+    const intx::uint512 max_gas_cost{intx::umul(intx::uint256{txn.gas_limit}, charged_gas_price)};
     // See YP, Eq (57) in Section 6.2 "Execution"
     const intx::uint512 v0{max_gas_cost + txn.value};
-    std::cout<<to_hex(*txn.from)<<" "<<to_hex(*txn.to)<<" "<<intx::hex((state_.get_balance(*txn.from)))<<" "<<intx::hex((state_.get_balance(*txn.to)))<<" "<<intx::hex((state_.get_balance(0x0000000000000000000000000000000000000000_address)))<<" "<<intx::hex(v0)<<std::endl;
+    std::cout<<to_hex(*txn.from)<<" "<<to_hex(*txn.to)<<" "<<intx::hex((state_.get_balance(*txn.from)))<<" "<<intx::hex((state_.get_balance(*txn.to)))<<" "<<intx::hex((state_.get_balance(0x0000000000000000000000000000000000000000_address)))<<" "<<intx::hex(v0)<<" "<<intx::hex(max_gas_cost)<<" "<<intx::hex(txn.value)<<std::endl;
     if (state_.get_balance(*txn.from) < v0 && *txn.from != 0x0000000000000000000000000000000000000000_address) {
         return ValidationResult::kInsufficientFunds;
     }
@@ -110,8 +114,8 @@ void ExecutionProcessor::execute_transaction(const Transaction& txn, Receipt& re
     assert(g0 <= UINT64_MAX);  // true due to the precondition (transaction must be valid)
 
     const CallResult vm_res{evm_.execute(txn, txn.gas_limit - static_cast<uint64_t>(g0))};
-
-    const uint64_t gas_used{txn.gas_limit - refund_gas(txn, vm_res.gas_left, vm_res.gas_refund)};
+    const uint64_t gas_used{txn.gas_limit - vm_res.gas_left};
+    refund_gas(txn, vm_res.gas_left, vm_res.gas_refund);
 
     // award the fee recipient
     const intx::uint256 priority_fee_per_gas{txn.priority_fee_per_gas(base_fee_per_gas)};

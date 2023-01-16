@@ -231,7 +231,6 @@ inline constexpr ChainConfig kTelosEVMMainnetConfig{
             180'698'823,          // Petersburg
             180'698'823,          // Istanbul
             180'698'823,          // Berlin
-            180'698'823,          // London
         },
 };
 
@@ -248,7 +247,6 @@ inline constexpr ChainConfig kTelosEVMTestnetConfig{
             136'393'756,          // Petersburg
             136'393'756,          // Istanbul
             136'393'756,          // Berlin
-            136'393'756,          // London
         },
 };
 

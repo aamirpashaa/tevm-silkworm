@@ -11,7 +11,8 @@
       "byzantiumBlock": 180698823,
       "constantinopleBlock": 180698823,
       "petersburgBlock": 180698823,
-      "istanbulBlock": 180698823
+      "istanbulBlock": 180698823,
+      "berlinBlock": 180698823
     },
     "difficulty": "0x0",
     "extraData": "0x0ac53eebcfa1cf139272bf58540d6dc53f0d22785f9e3d74cb9bc333b597e1bf",

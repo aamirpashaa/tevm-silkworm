@@ -19,13 +19,6 @@
 #error regenerate this file with a newer version of protoc.
 #endif
 
-#ifdef major
-#undef major
-#endif
-#ifdef minor
-#undef minor
-#endif
-
 #include <google/protobuf/port_undef.inc>
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/arena.h>

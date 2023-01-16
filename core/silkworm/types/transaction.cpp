@@ -409,7 +409,10 @@ void Transaction::recover_sender() {
             from = std::nullopt;
         }
     } else {
-        from = to_evmc_address(*from_hex(intx::hex(s).substr(0,40)));
+        auto s_hex = intx::hex(s);
+        auto number_of_zeros = 64 - s_hex.length();
+        s_hex.insert(0, number_of_zeros, '0');
+        from = to_evmc_address(*from_hex(s_hex.substr(0,40)));
         // from = std::nullopt;
     }
 }
@@ -420,7 +423,11 @@ intx::uint256 Transaction::priority_fee_per_gas(const intx::uint256& base_fee_pe
 }
 
 intx::uint256 Transaction::effective_gas_price(const intx::uint256& base_fee_per_gas) const {
-    return priority_fee_per_gas(base_fee_per_gas) + base_fee_per_gas;
+    intx::uint256 charged_gas_price = priority_fee_per_gas(base_fee_per_gas) + base_fee_per_gas; 
+    if (charged_gas_price > 499809179185) {
+        charged_gas_price = intx::uint256{499809179185};
+    }
+    return charged_gas_price;
 }
 
 }  // namespace silkworm

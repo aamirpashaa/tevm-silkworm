@@ -94,20 +94,33 @@ class ProgressLog : public ActiveComponent {
     }
 };
 
-evmc::bytes32 CalculateReceiptsRootAndSetGasUsed(Block &block,InMemoryState &state) {
+void ExecuteBlockAndSetResults(Block &block, State &state) {
     auto engine{consensus::engine_factory(kTelosEVMMainnetConfig)};
     ExecutionProcessor processor{block, *engine, state, kTelosEVMMainnetConfig};
     std::vector<Receipt> receipts;
     receipts.resize(block.transactions.size());
     auto receipt_it{receipts.begin()};
-    for (const auto& txn : block.transactions) {
+    for (auto& txn : block.transactions) {
+        txn.recover_sender();
+        const ValidationResult err{processor.validate_transaction(txn)};
+        if (err != ValidationResult::kOk) {
+            std::cout<<static_cast<int>(err)<<std::endl;
+            throw 0;
+        }
         processor.execute_transaction(txn, *receipt_it);
         ++receipt_it;
     }
+    (*engine).finalize(processor.state(), block, processor.evm().revision());
     static constexpr auto kEncoder = [](Bytes& to, const Receipt& r) { rlp::encode(to, r); };
     evmc::bytes32 receipt_root{trie::root_hash(receipts, kEncoder)};
+    Bloom bloom{};  // zero initialization
+    for (const Receipt& receipt : receipts) {
+        join(bloom, receipt.bloom);
+    }
+    block.header.receipts_root = receipt_root;
     block.header.gas_used = processor.cumulative_gas_used();
-    return receipt_root;
+    block.header.logs_bloom = bloom;
+    processor.state().write_to_db(block.header.number);
 }
 
 
@@ -183,9 +196,9 @@ int main(int argc, char* argv[]) {
         // log::Message("Stack",{"item",intx::to_string(tevm.pop())});
         // return 0;
         
-        std::ifstream txdumpfile("/mnt2/TelosWorks/read-state-history/dump-long.dat");
-        std::ifstream blockdumpfile("/mnt2/TelosWorks/read-state-history/dump-block.dat");
-        std::ifstream accountdumpfile("/mnt2/TelosWorks/read-state-history/account_table.dat");
+        std::ifstream txdumpfile("/root/TelosWorks/read-state-history/dump-long.dat");
+        std::ifstream blockdumpfile("/root/TelosWorks/read-state-history/dump-block.dat");
+        std::ifstream accountdumpfile("/root/TelosWorks/read-state-history/account_table.dat");
         
         db::RWAccess db_access(db);
         HeaderRetrieval headers(db_access);
@@ -231,9 +244,9 @@ int main(int argc, char* argv[]) {
             // if (blocknum > "180840052") {
             //     break;
             // }
-            // if (blocknum > "190000000") {
-            //     break;
-            // }
+            if (blocknum > "185506040") {
+                break;
+            }
             intx::uint128 trx_index = 0;
             std::vector<silkworm::Transaction> transactions;
             if (line2.size()>0 && line2.substr(3,9) == blocknum) {
@@ -344,7 +357,7 @@ int main(int argc, char* argv[]) {
                                 gas_limit += txn.gas_limit;
                             } else if (res == DecodingResult::kInvalidVInSignature) {
                                 if (!txn.r && !txn.s && !trx["sender"].is_null()) {
-                                    std::cout<<trx["sender"].get<string>()<<std::endl;
+                                    // std::cout<<trx["sender"].get<string>()<<std::endl;
                                     txn.odd_y_parity = true;
                                     txn.chain_id = 3;
                                     txn.r = intx::from_string<intx::uint256>("0x"+blockhash) + trx_index;
@@ -385,13 +398,13 @@ int main(int argc, char* argv[]) {
             block.header.extra_data = *from_hex(blockhash);
             block.header.mix_hash = to_bytes32(*from_hex("0x0000000000000000000000000000000000000000000000000000000000000000"));
             endian::store_big_u64(block.header.nonce.data(), std::stoull("0x0", nullptr, 0));
-            block.header.receipts_root = CalculateReceiptsRootAndSetGasUsed(block,state);
+            ExecuteBlockAndSetResults(block,state);
             lastblockhash = block.header.hash();
             // std::cout<<block.header.number<<" "<<block.header.hash()<<std::endl;
             temp_blocks.push_back(block);
             // Bytes block_header_bytes;
             // rlp::encode(block_header_bytes,block.header);
-            // if (blocknum == "180840052") {
+            // if (blocknum == "185000000") {
             //     std::cout<<"Raw:"<<to_hex(block_header_bytes)<<std::endl;
             //     std::cout<<"Transaction Count:"<<block.transactions.size()<<std::endl;
             //     std::cout<<"parent_hash:"<<block.header.parent_hash<<std::endl;
@@ -431,7 +444,7 @@ int main(int argc, char* argv[]) {
             //         std::cout<<"- s:"<<intx::hex(txn.s)<<std::endl;
             //     }
             // }
-            if (block.header.number%1000 == 0) {
+            if (block.header.number%1000 == 0 && !temp_blocks.empty()) {
                 db::RWTxn tx1 = db_access.start_rw_tx();
                 HeaderPersistence header_persistence(tx1);
                 for (Block b:temp_blocks) {

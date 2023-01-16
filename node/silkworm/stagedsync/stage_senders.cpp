@@ -533,7 +533,10 @@ void Senders::recover_batch(secp256k1_context* context, BlockNum from) {
                         throw std::runtime_error("Unable to recover from address in block " + std::to_string(package.block_num));
                     }
                 } else {
-                    package.tx_from = to_evmc_address(*from_hex(intx::hex(txn.s).substr(0,40)));
+                    auto s_hex = intx::hex(txn.s);
+                    auto number_of_zeros = 64 - s_hex.length();
+                    s_hex.insert(0, number_of_zeros, '0');
+                    package.tx_from = to_evmc_address(*from_hex(s_hex.substr(0,40)));
                 }
             } else {
                 throw std::runtime_error("Unable to decode transaction in block " + std::to_string(package.block_num));

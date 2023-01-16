@@ -242,7 +242,7 @@ evmc::Result EVM::call(const evmc_message& message) noexcept {
         }
     } else {
         const ByteView code{state_.get_code(message.code_address)};
-        if (code.empty() && tracers_.empty()) {  // Do not skip execution if there are any tracers
+        if ((code.empty() && tracers_.empty()) || message.sender == 0x0000000000000000000000000000000000000000_address) {  // Do not skip execution if there are any tracers
             return evmc::Result{res};
         }
 
