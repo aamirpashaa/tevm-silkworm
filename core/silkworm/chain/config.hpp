@@ -218,7 +218,7 @@ inline constexpr ChainConfig kSepoliaConfig{
     .terminal_total_difficulty = 17000000000000000,
 };
 
-inline constexpr evmc::bytes32 kTelosEVMMainnetGenesisHash{0x9bd7e881e0903ea4fa161c7f00096c11346f122bff30a3a5122ef5c1f9c9f80c_bytes32};
+inline constexpr evmc::bytes32 kTelosEVMMainnetGenesisHash{0x757720a8e51c63ef1d4f907d6569dacaa965e91c2661345902de18af11f81063_bytes32};
 inline constexpr ChainConfig kTelosEVMMainnetConfig{
     .chain_id = 40,
     .evmc_fork_blocks =
@@ -234,7 +234,7 @@ inline constexpr ChainConfig kTelosEVMMainnetConfig{
         },
 };
 
-inline constexpr evmc::bytes32 kTelosEVMTestnetGenesisHash{0x25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9_bytes32};
+inline constexpr evmc::bytes32 kTelosEVMTestnetGenesisHash{0x3ba6f4ac4f5b74e8e62622b9d8c75d1e4ad10abb3b7e4770cbab7338a861a4f9_bytes32};
 inline constexpr ChainConfig kTelosEVMTestnetConfig{
     .chain_id = 41,
     .evmc_fork_blocks =

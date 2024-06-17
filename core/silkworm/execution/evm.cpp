@@ -202,6 +202,12 @@ evmc::Result EVM::call(const evmc_message& message) noexcept {
     }
 
     const auto snapshot{state_.take_snapshot()};
+    static std::map<std::vector<uint8_t>,evmc_address> first_new_address;
+    Bytes txn_data;
+    rlp::encode(txn_data, *txn_, /*for_signing=*/false, /*wrap_eip2718_into_string=*/false);
+    auto txn_hash{keccak256(txn_data)};
+    std::vector<uint8_t> txn_hash_vec(std::begin(txn_hash.bytes),std::end(txn_hash.bytes));
+    auto it = first_new_address.find(txn_hash_vec);
 
     if (message.kind == EVMC_CALL) {
         if (message.flags & EVMC_STATIC) {
@@ -210,15 +216,33 @@ evmc::Result EVM::call(const evmc_message& message) noexcept {
             state_.touch(message.recipient);
         } else {
             if (message.sender != 0x0000000000000000000000000000000000000000_address) {
+                std::cout<<"A "<<first_new_address.size()<<std::endl;
                 state_.subtract_from_balance(message.sender, value);
             }
             if (message.recipient != 0x0000000000000000000000000000000000000000_address) {
-                state_.add_to_balance(message.recipient, value);
+                if (state_.exists(message.recipient)) {
+                    std::cout<<"B "<<to_hex(message.recipient.bytes)<<std::endl;
+                    state_.add_to_balance(message.recipient, value);
+                } else {
+                    if (it != first_new_address.end()) {
+                        std::cout<<"C "<<to_hex(it->second.bytes)<<std::endl;
+                        state_.add_to_balance(it->second, value);
+                    } else {
+                        first_new_address.insert(std::make_pair(txn_hash_vec,message.recipient));
+                        std::cout<<"D "<<to_hex(message.recipient.bytes)<<" "<<first_new_address.size()<<std::endl;
+                        state_.add_to_balance(message.recipient, value);
+                    }
+                }
+                
             }
         }
     }
 
     if (is_precompiled(message.code_address)) {
+        if (!state_.exists(message.code_address) && it == first_new_address.end()) {
+            first_new_address.insert(std::make_pair(txn_hash_vec,message.code_address));
+            std::cout<<"E "<<to_hex(message.code_address.bytes)<<" "<<first_new_address.size()<<std::endl;
+        }
         const uint8_t num{message.code_address.bytes[kAddressLength - 1]};
         SilkpreContract contract{kSilkpreContracts[num - 1]};
         const ByteView input{message.input_data, message.input_size};

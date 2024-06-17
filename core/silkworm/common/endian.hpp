@@ -94,9 +94,9 @@ static DecodingResult from_big_compact(ByteView data, T& out) {
         return DecodingResult::kOk;
     }
 
-    if (data[0] == 0) {
-        return DecodingResult::kLeadingZero;
-    }
+    // if (data[0] == 0) {
+    //     return DecodingResult::kLeadingZero;
+    // }
 
     auto* ptr{reinterpret_cast<uint8_t*>(&out)};
     std::memcpy(ptr + (sizeof(T) - data.length()), &data[0], data.length());
