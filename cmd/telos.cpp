@@ -115,6 +115,19 @@ void ExecuteBlockAndSetResults(Block &block, State &state) {
     evmc::bytes32 receipt_root{trie::root_hash(receipts, kEncoder)};
     Bloom bloom{};  // zero initialization
     for (const Receipt& receipt : receipts) {
+        if(block.header.number == 228256621) {
+            std::cout<<"bloom:"<<receipt.bloom<<std::endl;
+            std::cout<<"cumulative_gas_used:"<<receipt.cumulative_gas_used<<std::endl;
+            for (const Log& log : receipt.logs) {
+                std::cout<<"-address:"<<to_hex(log.address.bytes)<<std::endl;
+                std::cout<<"-data:"<<log.data<<std::endl;
+                for (const evmc::bytes32& topic : log.topics) {
+                    std::cout<<"-topic:"<<to_hex(topic.bytes)<<std::endl;
+                }
+            }
+            std::cout<<"success:"<<receipt.success<<std::endl;
+            std::cout<<"type:"<<static_cast<int>(receipt.type)<<std::endl;
+        }
         join(bloom, receipt.bloom);
     }
     block.header.receipts_root = receipt_root;
@@ -195,10 +208,49 @@ int main(int argc, char* argv[]) {
         // tevm.push(intx::uint256{25});
         // log::Message("Stack",{"item",intx::to_string(tevm.pop())});
         // return 0;
+
+        // Transaction txnt;
+        // // std::cout<<type<<" "<<blocknum<<" "<<trx["tx"].get<string>()<<std::endl;
+        // std::optional<Bytes> rlpt{from_hex("0xED0D85745EF2D63182886F94D102CE6A4DB07D247FCC28F366A623DF0938CA9E8806F05B59D3B2000084D0E30DB0")};
+        // if (rlpt) {
+        //     ByteView view{*rlpt};
+        //     auto res = rlp::decode_transaction(view, txnt, rlp::Eip2718Wrapping::kNone);
+        //     auto txn_hash{keccak256(rlpt.value())};
+        //     ByteView txn_hash_view{txn_hash.bytes};
+        //     std::cout<<to_hex(txn_hash_view)<<std::endl;
+        //     if (res == DecodingResult::kOk) {
+        //         std::cout<<"kOk"<<std::endl;
+        //     } else if (res == DecodingResult::kInvalidVInSignature) {
+        //         std::cout<<"kInvalidVInSignature"<<std::endl;
+        //     } else {
+        //         txnt.recover_sender();
+        //         std::cout<<"- hash:"<<to_hex(txn_hash_view)<<std::endl;
+        //         std::cout<<"- nonce:"<<txnt.nonce<<std::endl;
+        //         std::cout<<"- gas_limit:"<<txnt.gas_limit<<std::endl;
+        //         std::cout<<"- max_fee_per_gas:"<<intx::hex(txnt.max_fee_per_gas)<<std::endl;
+        //         std::cout<<"- max_priority_fee_per_gas:"<<intx::hex(txnt.max_priority_fee_per_gas)<<std::endl;
+        //         // std::cout<<"- from:"<<txnt.from.value()<<std::endl;
+        //         std::cout<<"- to:"<<txnt.to.value()<<std::endl;
+        //         std::cout<<"- value:"<<intx::hex(txnt.value)<<std::endl;
+        //         std::cout<<"- data:"<<txnt.data<<std::endl;
+        //         std::cout<<"- v:"<<intx::to_string(txnt.v())<<std::endl;
+        //         std::cout<<"- r:"<<intx::hex(txnt.r)<<std::endl;
+        //         std::cout<<"- s:"<<intx::hex(txnt.s)<<std::endl;
+        //         std::cout<<"ERROR ON PROCESSING TRANSACTION: Invalid result "<<static_cast<int>(res)<<std::endl;
+        //         throw 0;
+        //     }
+        // } else {
+        //     std::cout<<"ERROR ON PROCESSING TRANSACTION: Invalid transaction encoding"<<std::endl;
+        //     throw 0;
+        // }
+        // return 0;
+
+        std::ofstream blockhashes("blockhashes.txt");
+        std::ofstream blockbytes("/telos/read-state-history/dump-block-bytes.dat");
         
-        std::ifstream txdumpfile("/root/TelosWorks/read-state-history/dump-long.dat");
-        std::ifstream blockdumpfile("/root/TelosWorks/read-state-history/dump-block.dat");
-        std::ifstream accountdumpfile("/root/TelosWorks/read-state-history/account_table.dat");
+        std::ifstream txdumpfile("/telos/read-state-history/dump-tx.dat");
+        std::ifstream blockdumpfile("/telos/read-state-history/dump-block.dat");
+        std::ifstream accountdumpfile("/telos/read-state-history/account_table.dat");
         
         db::RWAccess db_access(db);
         HeaderRetrieval headers(db_access);
@@ -236,23 +288,28 @@ int main(int argc, char* argv[]) {
         do {
             std::string blocknum = std::to_string(stoull(line.substr(0,9))-36);
             std::string blockhash = line.substr(10,64);
-            std::string blocktime = std::to_string(stoull(line.substr(75,10))+12600);
+            std::string blocktime = std::to_string(stoull(line.substr(75,10)));
             uint64_t gas_limit = 0;
-            // if (blocknum > "180698824") {
+            // if (blocknum > "200000000") {
             //     break;
             // }
             // if (blocknum > "180840052") {
             //     break;
             // }
-            if (blocknum > "185506040") {
-                break;
-            }
+            // if (blocknum > "196690028") {
+            //     break;
+            // }
             intx::uint128 trx_index = 0;
             std::vector<silkworm::Transaction> transactions;
             if (line2.size()>0 && line2.substr(3,9) == blocknum) {
                 do {
                     std::string type = line2.substr(0,3);
                     nlohmann::json trx = nlohmann::json::parse(line2.substr(12));
+                    if (blocknum == "264298312") {
+                        Account acc;
+                        acc.nonce = 1;
+                        state.update_account(to_evmc_address(*from_hex("0xcd0b625998ebd5dac18101e0b7ad4374ecda21e0")),acc,acc);
+                    }
                     if (type == "DPS") {
                         // std::cout<<type<<" "<<blocknum<<" "<<trx["from"].get<string>()<<std::endl;
                         std::string quantity = trx["quantity"].get<string>();
@@ -353,9 +410,21 @@ int main(int argc, char* argv[]) {
                             // ByteView txn_hash_view{txn_hash.bytes};
                             // std::cout<<to_hex(txn_hash_view)<<std::endl;
                             if (res == DecodingResult::kOk) {
+                                if (!txn.r && !txn.s) {
+                                    if (!trx["sender"].is_null()) {
+                                        // std::cout<<trx["sender"].get<string>()<<std::endl;
+                                        txn.odd_y_parity = true;
+                                        txn.chain_id = 3;
+                                        txn.r = intx::from_string<intx::uint256>("0x"+blockhash) + trx_index;
+                                        txn.s = intx::from_string<intx::uint256>("0x"+trx["sender"].get<string>()+"000000000000000000000000");
+                                    }  else {
+                                        std::cout<<"ERROR ON PROCESSING TRANSACTION: Failed to recover sender"<<std::endl;
+                                        throw 0;
+                                    }
+                                }
                                 transactions.push_back(txn);
                                 gas_limit += txn.gas_limit;
-                            } else if (res == DecodingResult::kInvalidVInSignature) {
+                            } else if (res == DecodingResult::kInvalidVInSignature || res == DecodingResult::kInputTooShort) {
                                 if (!txn.r && !txn.s && !trx["sender"].is_null()) {
                                     // std::cout<<trx["sender"].get<string>()<<std::endl;
                                     txn.odd_y_parity = true;
@@ -393,57 +462,65 @@ int main(int argc, char* argv[]) {
             block.header.receipts_root = kEmptyRoot;
             block.header.difficulty = intx::from_string<intx::uint256>("0x0");
             block.header.number = std::stoull(blocknum, nullptr, 0);
-            block.header.gas_limit = gas_limit;
+            block.header.gas_limit = 2147483647;
             block.header.timestamp = std::stoull(blocktime, nullptr, 0);
             block.header.extra_data = *from_hex(blockhash);
             block.header.mix_hash = to_bytes32(*from_hex("0x0000000000000000000000000000000000000000000000000000000000000000"));
             endian::store_big_u64(block.header.nonce.data(), std::stoull("0x0", nullptr, 0));
             ExecuteBlockAndSetResults(block,state);
             lastblockhash = block.header.hash();
-            // std::cout<<block.header.number<<" "<<block.header.hash()<<std::endl;
+            if (block.header.number%1000 == 0) {
+                std::cout<<block.header.number<<" "<<lastblockhash<<std::endl;
+            }
+            blockhashes<<block.header.number<<" "<<lastblockhash<<std::endl;
             temp_blocks.push_back(block);
+            Bytes block_bytes;
+            rlp::encode(block_bytes,block);
+            blockbytes<<to_hex(block_bytes)<<std::endl;
             // Bytes block_header_bytes;
             // rlp::encode(block_header_bytes,block.header);
-            // if (blocknum == "185000000") {
-            //     std::cout<<"Raw:"<<to_hex(block_header_bytes)<<std::endl;
-            //     std::cout<<"Transaction Count:"<<block.transactions.size()<<std::endl;
-            //     std::cout<<"parent_hash:"<<block.header.parent_hash<<std::endl;
-            //     std::cout<<"ommers_hash:"<<block.header.ommers_hash<<std::endl;
-            //     std::cout<<"beneficiary:"<<block.header.beneficiary<<std::endl;
-            //     std::cout<<"state_root:"<<block.header.state_root<<std::endl;
-            //     std::cout<<"transactions_root:"<<block.header.transactions_root<<std::endl;
-            //     std::cout<<"receipts_root:"<<block.header.receipts_root<<std::endl;
-            //     std::cout<<"difficulty:"<<intx::to_string(block.header.difficulty)<<std::endl;
-            //     std::cout<<"number:"<<block.header.number<<std::endl;
-            //     std::cout<<"gas_used:"<<block.header.gas_used<<std::endl;
-            //     std::cout<<"gas_limit:"<<block.header.gas_limit<<std::endl;
-            //     std::cout<<"timestamp:"<<block.header.timestamp<<std::endl;
-            //     std::cout<<"extra_data:"<<block.header.extra_data<<std::endl;
-            //     std::cout<<"mix_hash:"<<block.header.mix_hash<<std::endl;
-            //     std::cout<<"nonce:"<<block.header.nonce<<std::endl;
-            //     std::cout<<"transactions:"<<std::endl;
-            //     for (auto &txn : block.transactions) {
-            //         txn.recover_sender();
-            //         Bytes txn_data;
-            //         rlp::encode(txn_data, txn, /*for_signing=*/false, /*wrap_eip2718_into_string=*/false);
-            //         auto txn_hash{keccak256(txn_data)};
-            //         ByteView txn_hash_view{txn_hash.bytes};
-            //         std::cout<<"######################"<<std::endl;
-            //         std::cout<<"- raw:"<<to_hex(txn_data)<<std::endl;
-            //         std::cout<<"- hash:"<<to_hex(txn_hash_view)<<std::endl;
-            //         std::cout<<"- nonce:"<<txn.nonce<<std::endl;
-            //         std::cout<<"- gas_limit:"<<txn.gas_limit<<std::endl;
-            //         std::cout<<"- max_fee_per_gas:"<<intx::hex(txn.max_fee_per_gas)<<std::endl;
-            //         std::cout<<"- max_priority_fee_per_gas:"<<intx::hex(txn.max_priority_fee_per_gas)<<std::endl;
-            //         std::cout<<"- from:"<<txn.from.value()<<std::endl;
-            //         std::cout<<"- to:"<<txn.to.value()<<std::endl;
-            //         std::cout<<"- value:"<<intx::hex(txn.value)<<std::endl;
-            //         std::cout<<"- data:"<<txn.data<<std::endl;
-            //         std::cout<<"- v:"<<intx::to_string(txn.v())<<std::endl;
-            //         std::cout<<"- r:"<<intx::hex(txn.r)<<std::endl;
-            //         std::cout<<"- s:"<<intx::hex(txn.s)<<std::endl;
-            //     }
-            // }
+            if (blocknum == "1") {
+                // std::cout<<"Raw:"<<to_hex(block_header_bytes)<<std::endl;
+                std::cout<<"Hash:"<<lastblockhash<<std::endl;
+                std::cout<<"Transaction Count:"<<block.transactions.size()<<std::endl;
+                std::cout<<"parent_hash:"<<block.header.parent_hash<<std::endl;
+                std::cout<<"ommers_hash:"<<block.header.ommers_hash<<std::endl;
+                std::cout<<"beneficiary:"<<block.header.beneficiary<<std::endl;
+                std::cout<<"state_root:"<<block.header.state_root<<std::endl;
+                std::cout<<"transactions_root:"<<block.header.transactions_root<<std::endl;
+                std::cout<<"receipts_root:"<<block.header.receipts_root<<std::endl;
+                std::cout<<"difficulty:"<<intx::to_string(block.header.difficulty)<<std::endl;
+                std::cout<<"number:"<<block.header.number<<std::endl;
+                std::cout<<"gas_used:"<<block.header.gas_used<<std::endl;
+                std::cout<<"gas_limit:"<<block.header.gas_limit<<std::endl;
+                std::cout<<"timestamp:"<<block.header.timestamp<<std::endl;
+                std::cout<<"extra_data:"<<block.header.extra_data<<std::endl;
+                std::cout<<"mix_hash:"<<block.header.mix_hash<<std::endl;
+                std::cout<<"nonce:"<<block.header.nonce<<std::endl;
+                std::cout<<"transactions:"<<std::endl;
+                for (auto &txn : block.transactions) {
+                    txn.recover_sender();
+                    Bytes txn_data;
+                    rlp::encode(txn_data, txn, /*for_signing=*/false, /*wrap_eip2718_into_string=*/false);
+                    auto txn_hash{keccak256(txn_data)};
+                    ByteView txn_hash_view{txn_hash.bytes};
+                    std::cout<<"######################"<<std::endl;
+                    std::cout<<"- raw:"<<to_hex(txn_data)<<std::endl;
+                    std::cout<<"- hash:"<<to_hex(txn_hash_view)<<std::endl;
+                    std::cout<<"- nonce:"<<txn.nonce<<std::endl;
+                    std::cout<<"- gas_limit:"<<txn.gas_limit<<std::endl;
+                    std::cout<<"- max_fee_per_gas:"<<intx::hex(txn.max_fee_per_gas)<<std::endl;
+                    std::cout<<"- max_priority_fee_per_gas:"<<intx::hex(txn.max_priority_fee_per_gas)<<std::endl;
+                    std::cout<<"- from:"<<txn.from.value()<<std::endl;
+                    std::cout<<"- to:"<<txn.to.value()<<std::endl;
+                    std::cout<<"- value:"<<intx::hex(txn.value)<<std::endl;
+                    std::cout<<"- data:"<<txn.data<<std::endl;
+                    std::cout<<"- v:"<<intx::to_string(txn.v())<<std::endl;
+                    std::cout<<"- r:"<<intx::hex(txn.r)<<std::endl;
+                    std::cout<<"- s:"<<intx::hex(txn.s)<<std::endl;
+                }
+                getchar();
+            }
             if (block.header.number%1000 == 0 && !temp_blocks.empty()) {
                 db::RWTxn tx1 = db_access.start_rw_tx();
                 HeaderPersistence header_persistence(tx1);
@@ -480,6 +557,8 @@ int main(int argc, char* argv[]) {
             temp_blocks.clear();
         }
         std::cout<<"SALAM"<<std::endl;
+        blockhashes.close();
+        blockbytes.close();
         return 0;
 
         // auto db_access = Db::ReadWriteAccess{db};

@@ -74,7 +74,7 @@ struct Transaction {
     void recover_sender();
 
     [[nodiscard]] intx::uint256 priority_fee_per_gas(const intx::uint256& base_fee_per_gas) const;  // EIP-1559
-    [[nodiscard]] intx::uint256 effective_gas_price(const intx::uint256& base_fee_per_gas) const;   // EIP-1559
+    [[nodiscard]] intx::uint256 effective_gas_price(const intx::uint256& base_fee_per_gas, const uint64_t block_number) const;   // EIP-1559
 };
 
 bool operator==(const Transaction& a, const Transaction& b);

@@ -422,10 +422,140 @@ intx::uint256 Transaction::priority_fee_per_gas(const intx::uint256& base_fee_pe
     return std::min(max_priority_fee_per_gas, max_fee_per_gas - base_fee_per_gas);
 }
 
-intx::uint256 Transaction::effective_gas_price(const intx::uint256& base_fee_per_gas) const {
+intx::uint256 Transaction::effective_gas_price(const intx::uint256& base_fee_per_gas, const uint64_t block_number) const {
     intx::uint256 charged_gas_price = priority_fee_per_gas(base_fee_per_gas) + base_fee_per_gas; 
-    if (charged_gas_price > 499809179185) {
-        charged_gas_price = intx::uint256{499809179185};
+    if (block_number < 255838760) {
+        if (charged_gas_price > 499809179185) {
+            charged_gas_price = intx::uint256{499809179185};
+        }
+    } else if (block_number < 256919102) {
+        if (charged_gas_price > 503604564858) {
+            charged_gas_price = intx::uint256{503604564858};
+        }
+    } else if (block_number < 258567748) {
+        if (charged_gas_price > 503624212149) {
+            charged_gas_price = intx::uint256{503624212149};
+        }
+    } else if (block_number < 260508029) {
+        if (charged_gas_price > 503659916170) {
+            charged_gas_price = intx::uint256{503659916170};
+        }
+    } else if (block_number < 261916623) {
+        if (charged_gas_price > 503692840132) {
+            charged_gas_price = intx::uint256{503692840132};
+        }
+    } else if (block_number < 263258684) {
+        if (charged_gas_price > 503730067379) {
+            charged_gas_price = intx::uint256{503730067379};
+        }
+    } else if (block_number < 265110408) {
+        if (charged_gas_price > 503766558895) {
+            charged_gas_price = intx::uint256{503766558895};
+        }
+    } else if (block_number < 266854672) {
+        if (charged_gas_price > 503847329123) {
+            charged_gas_price = intx::uint256{503847329123};
+        }
+    } else if (block_number < 271693305) {
+        if (charged_gas_price > 503937085418) {
+            charged_gas_price = intx::uint256{503937085418};
+        }
+    } else if (block_number < 277570654) {
+        if (charged_gas_price > 504169102143) {
+            charged_gas_price = intx::uint256{504169102143};
+        }
+    } else if (block_number < 281052225) {
+        if (charged_gas_price > 504588007093) {
+            charged_gas_price = intx::uint256{504588007093};
+        }
+    } else if (block_number < 282427274) {
+        if (charged_gas_price > 504730060459) {
+            charged_gas_price = intx::uint256{504730060459};
+        }
+    } else if (block_number < 286905983) {
+        if (charged_gas_price > 504777487548) {
+            charged_gas_price = intx::uint256{504777487548};
+        }
+    } else if (block_number < 290533301) {
+        if (charged_gas_price > 504901632992) {
+            charged_gas_price = intx::uint256{504901632992};
+        }
+    } else if (block_number < 296069390) {
+        if (charged_gas_price > 505018605664) {
+            charged_gas_price = intx::uint256{505018605664};
+        }
+    } else if (block_number < 300562146) {
+        if (charged_gas_price > 505225116066) {
+            charged_gas_price = intx::uint256{505225116066};
+        }
+    } else if (block_number < 307967043) {
+        if (charged_gas_price > 505764887222) {
+            charged_gas_price = intx::uint256{505764887222};
+        }
+    } else if (block_number < 309157097) {
+        if (charged_gas_price > 507293569984) {
+            charged_gas_price = intx::uint256{507293569984};
+        }
+    } else if (block_number < 312517437) {
+        if (charged_gas_price > 507611802460) {
+            charged_gas_price = intx::uint256{507611802460};
+        }
+    } else if (block_number < 314907931) {
+        if (charged_gas_price > 508508333703) {
+            charged_gas_price = intx::uint256{508508333703};
+        }
+    } else if (block_number < 319569825) {
+        if (charged_gas_price > 509215569036) {
+            charged_gas_price = intx::uint256{509215569036};
+        }
+    } else if (block_number < 323391709) {
+        if (charged_gas_price > 510837337450) {
+            charged_gas_price = intx::uint256{510837337450};
+        }
+    } else if (block_number < 324360809) {
+        if (charged_gas_price > 511832996910) {
+            charged_gas_price = intx::uint256{511832996910};
+        }
+    } else if (block_number < 324398028) {
+        if (charged_gas_price > 512009459358) {
+            charged_gas_price = intx::uint256{512009459358};
+        }
+    } else if (block_number < 325597355) {
+        if (charged_gas_price > 512023715983) {
+            charged_gas_price = intx::uint256{512023715983};
+        }
+    } else if (block_number < 329239018) {
+        if (charged_gas_price > 512509489520) {
+            charged_gas_price = intx::uint256{512509489520};
+        }
+    } else if (block_number < 329714374) {
+        if (charged_gas_price > 513753813459) {
+            charged_gas_price = intx::uint256{513753813459};
+        }
+    } else if (block_number < 332358496) {
+        if (charged_gas_price > 513889289168) {
+            charged_gas_price = intx::uint256{513889289168};
+        }
+    } else if (block_number < 334211846) {
+        if (charged_gas_price > 514927973622) {
+            charged_gas_price = intx::uint256{514927973622};
+        }
+    } else if (block_number < 338022602) {
+        if (charged_gas_price > 515474978733) {
+            charged_gas_price = intx::uint256{515474978733};
+        }
+    } else if (block_number < 339221402) {
+        if (charged_gas_price > 516125417219) {
+            charged_gas_price = intx::uint256{516125417219};
+        }
+    } else if (block_number < 344908827) {
+        if (charged_gas_price > 516282803626) {
+            charged_gas_price = intx::uint256{516282803626};
+        }
+    } else {
+        if (charged_gas_price > 516900477336) {
+            charged_gas_price = intx::uint256{516900477336};
+        }
     }
     return charged_gas_price;
 }

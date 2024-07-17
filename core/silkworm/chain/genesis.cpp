@@ -100,6 +100,11 @@ BlockHeader read_genesis_header(const nlohmann::json& genesis_json, const evmc::
         const auto number_str{genesis_json["number"].get<std::string>()};
         header.number = intx::from_string<uint64_t>(number_str);
     }
+    if (genesis_json.contains("parentHash")) {
+        const std::optional<Bytes> parent_hash{from_hex(genesis_json["parentHash"].get<std::string>())};
+        SILKWORM_ASSERT(parent_hash.has_value());
+        std::memcpy(header.parent_hash.bytes, parent_hash->data(), parent_hash->size());
+    }
 
     header.ommers_hash = kEmptyListHash;
     header.state_root = state_root;

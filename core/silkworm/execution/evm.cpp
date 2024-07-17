@@ -202,6 +202,12 @@ evmc::Result EVM::call(const evmc_message& message) noexcept {
     }
 
     const auto snapshot{state_.take_snapshot()};
+    static std::map<std::vector<uint8_t>,evmc_address> first_new_address;
+    Bytes txn_data;
+    rlp::encode(txn_data, *txn_, /*for_signing=*/false, /*wrap_eip2718_into_string=*/false);
+    auto txn_hash{keccak256(txn_data)};
+    std::vector<uint8_t> txn_hash_vec(std::begin(txn_hash.bytes),std::end(txn_hash.bytes));
+    auto it = first_new_address.find(txn_hash_vec);
 
     if (message.kind == EVMC_CALL) {
         if (message.flags & EVMC_STATIC) {
@@ -210,15 +216,38 @@ evmc::Result EVM::call(const evmc_message& message) noexcept {
             state_.touch(message.recipient);
         } else {
             if (message.sender != 0x0000000000000000000000000000000000000000_address) {
+                std::cout<<"A "<<first_new_address.size()<<std::endl;
                 state_.subtract_from_balance(message.sender, value);
             }
             if (message.recipient != 0x0000000000000000000000000000000000000000_address) {
-                state_.add_to_balance(message.recipient, value);
+                if (block_.header.number < 332317496) {
+                    if (state_.exists(message.recipient)) {
+                        std::cout<<"B "<<to_hex(message.recipient.bytes)<<std::endl;
+                        state_.add_to_balance(message.recipient, value);
+                    } else {
+                        if (it != first_new_address.end()) {
+                            std::cout<<"C "<<to_hex(it->second.bytes)<<std::endl;
+                            state_.add_to_balance(it->second, value);
+                        } else {
+                            first_new_address.insert(std::make_pair(txn_hash_vec,message.recipient));
+                            std::cout<<"D "<<to_hex(message.recipient.bytes)<<" "<<first_new_address.size()<<std::endl;
+                            state_.add_to_balance(message.recipient, value);
+                        }
+                    }
+                } else {
+                    state_.add_to_balance(message.recipient, value);
+                }
             }
         }
     }
 
     if (is_precompiled(message.code_address)) {
+        if (block_.header.number < 332317496) {
+            if (!state_.exists(message.code_address) && it == first_new_address.end()) {
+                first_new_address.insert(std::make_pair(txn_hash_vec,message.code_address));
+                std::cout<<"E "<<to_hex(message.code_address.bytes)<<" "<<first_new_address.size()<<std::endl;
+            }
+        }
         const uint8_t num{message.code_address.bytes[kAddressLength - 1]};
         SilkpreContract contract{kSilkpreContracts[num - 1]};
         const ByteView input{message.input_data, message.input_size};
@@ -511,7 +540,7 @@ evmc_tx_context EvmHost::get_tx_context() const noexcept {
     const BlockHeader& header{evm_.block_.header};
     evmc_tx_context context{};
     const intx::uint256 base_fee_per_gas{header.base_fee_per_gas.value_or(0)};
-    const intx::uint256 effective_gas_price{evm_.txn_->effective_gas_price(base_fee_per_gas)};
+    const intx::uint256 effective_gas_price{evm_.txn_->effective_gas_price(base_fee_per_gas,evm_.block_.header.number)};
     intx::be::store(context.tx_gas_price.bytes, effective_gas_price);
     context.tx_origin = *evm_.txn_->from;
     context.block_coinbase = evm_.beneficiary;
